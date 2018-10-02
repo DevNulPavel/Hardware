@@ -14,7 +14,7 @@
 #define SMS_RETRY_PERIOD 1000*10 // 10 sec
 #define SMS_URL "http://sms.ru/sms/send?api_id=E157D178-503A-437C-DA54-A93332A0B657&to=79113228054&json=1&msg="
 #define TEMPRATURE_ALERT 35
-#define HUMIDITY_ALERT 65
+#define HUMIDITY_ALERT 80
 
 
 DHT dht(DHTPIN, DHTTYPE);
