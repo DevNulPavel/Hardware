@@ -14,7 +14,7 @@ double resultValue = 0.0;
 
 //Specify the links and initial tuning parameters
 const double kp = 0.0;
-const double ki = 1.0;
+const double ki = 0.01;
 const double kd = 0.0;
 PID pid(&currentValue, &resultValue, &targetValue, kp, ki, kd, DIRECT);
 
@@ -26,6 +26,11 @@ void setup()  {
   setSyncProvider(RTC.get);   // the function to get the time from the RTC
   pinMode(OUT_PIN, OUTPUT);
   pid.SetMode(AUTOMATIC);
+  pid.SetSampleTime(50); // Раз в 50 миллисекунды будет рассчет
+
+  // Частота ШИМ для 3 ноги 3906.25гц
+  // http://kazus.ru/forums/showthread.php?t=107888
+  TCCR2B = TCCR2B & 0b11111000 | 0x02;
 
   targetValue = 600.0;
 }
@@ -49,6 +54,8 @@ void loop() {
 #endif
 
   currentValue = analogRead(PHOTO_PIN);
+  
+  delay(1);
   pid.Compute();
 
 #ifdef WITH_LOG
@@ -64,5 +71,5 @@ void loop() {
   //int pinOutValue = map(resultValue, 0, targetValue, 0, 255);
   analogWrite(OUT_PIN, resultValue);
 
-  //delay(20);
+  delay(20);
 }

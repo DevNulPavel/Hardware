@@ -25,7 +25,7 @@ void loop() {
 
   int testTime = hourNow*60 + minNow;
   bool validStart = (testTime >= (9*60+0));
-  bool validEnd = (testTime < (21*60+0));
+  bool validEnd = (testTime < (21*60+30));
   bool validTime = validStart && validEnd;
 
 #ifdef WITH_LOG
