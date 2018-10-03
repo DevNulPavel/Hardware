@@ -3,7 +3,7 @@
 #include <DS1307RTC.h>
 
 //#define WITH_LOG
-#define OUT_PIN 2
+#define OUT_PIN 3
 #define PHOTO_PIN 0
 #define DELAY_SECONDS 2
 #define LIGHT_LIMIT_ON 250
