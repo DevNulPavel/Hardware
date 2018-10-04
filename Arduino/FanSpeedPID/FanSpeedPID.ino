@@ -16,7 +16,7 @@ volatile long int changeCountPWMInterupt = 0;
 
 // Параметры регуляции
 const double kp = 0.0;
-const double ki = 0.5;
+const double ki = 0.2;
 const double kd = 0.0;
 PID pid(&input, &output, &setpoint, kp, ki, kd, DIRECT);
 
@@ -47,8 +47,8 @@ void setup() {
     // TCCR0B = TCCR0B & 0b11111000 | 0x02;
 
     // Прерывания
-    attachInterrupt(INTERRUPT_INDEX, interuptValueChanged, CHANGED);
-    attachInterrupt(INTERRUPT_PWM_INDEX, interuptPWMChanged, CHANGED);
+    attachInterrupt(INTERRUPT_INDEX, interuptValueChanged, CHANGE);
+    attachInterrupt(INTERRUPT_PWM_INDEX, interuptPWMChanged, CHANGE);
 }
 
 void loop() {
