@@ -12,6 +12,7 @@ unsigned int lastVal = 0;
 void setup() {
     Serial.begin(115200); // выставляем скорость COM порта
     irrecv.enableIRIn(); // запускаем прием
+    pinMode(FAN_PIN, OUTPUT);
 
     // http://kazus.ru/forums/showthread.php?t=107888
     // Частота ШИМ для 3 ноги 3906.25гц

@@ -33,6 +33,8 @@ void interuptPWMChanged() {
 //bool outStatus = bitRead(PORTD, PIN_OUTPUT);
 
 void setup() {
+    pinMode(PIN_OUTPUT, OUTPUT);
+    
     Serial.begin(115200);
 
     setpoint = 500.0;
