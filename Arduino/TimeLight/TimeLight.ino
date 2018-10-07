@@ -3,7 +3,7 @@
 #include <DS1307RTC.h>
 
 //#define WITH_LOG
-#define OUT_PIN 3
+#define OUT_PIN 9
 #define PHOTO_PIN 0
 #define DELAY_SECONDS 2
 #define LIGHT_LIMIT_ON 250
@@ -25,7 +25,7 @@ void loop() {
 
   int testTime = hourNow*60 + minNow;
   bool validStart = (testTime >= (9*60+0));
-  bool validEnd = (testTime < (21*60+30));
+  bool validEnd = (testTime < (22*60+00));
   bool validTime = validStart && validEnd;
 
 #ifdef WITH_LOG
