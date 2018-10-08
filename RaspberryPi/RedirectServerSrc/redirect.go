@@ -42,8 +42,8 @@ const MAIN_PAGE = `
     <p><a href="digma_image">Digma image</a></p>
     <p><a href="digma_small">Digma small image</a></p>
     <p><a href="digma_video">Digma video</a></p>
-    <p><a href="pi_image?shutter_time_ms=4000&iso=800">Pi image (Night)</a></p>
-    <p><a href="pi_image?shutter_time_ms=1000&iso=160">Pi image (Day)</a></p>
+    <p><a href="pi_image?shutter_time_ms=4000&iso=800&expos=0">Pi image (Night)</a></p>
+    <p><a href="pi_image?shutter_time_ms=200&iso=100&expos=0">Pi image (Day)</a></p>
     <p><a href="pi_custom">Pi image (Custom)</a></p>
 </body>
 </html>
@@ -87,6 +87,7 @@ const CUSTOM_PI_CAMERA_PAGE = `
         <form action="/pi_image" method="get">
           Shutter time (mSec): <input type="text" placeholder="in mSec" value="330" name="shutter_time_ms">
           ISO: <input type="text" placeholder="100-800" value="800" name="iso">
+          Expos correction: <input type="text" placeholder="-10<->10" value="0" name="expos">
           <br>
           <button type="submit">Go to image</button>
         </form>
@@ -254,8 +255,8 @@ func esp(w http.ResponseWriter, r *http.Request) {
     }
 }
 
-func getPiCameraImage(shutterTimeMSec uint32, iso uint32) ([]byte, error) {
-    commandText := fmt.Sprintf("raspistill -vf -hf -ss %d -ISO %d -o -", shutterTimeMSec*1000, iso)
+func getPiCameraImage(shutterTimeMSec uint32, iso uint32, exposCorrection uint32) ([]byte, error) {
+    commandText := fmt.Sprintf("raspistill -vf -hf -ss %d -ISO %d -awb auto -ex auto -ev %d -drc high -o -", shutterTimeMSec*1000, iso, exposCorrection)
     command := exec.Command("bash", "-c", commandText)
     imageResult, err := command.Output()
     if err != nil {
@@ -273,6 +274,7 @@ func piImage(w http.ResponseWriter, r *http.Request) {
 
     var shutterTime uint32 = 330
     var iso uint32 = 800
+    var exposCorrection uint32 = 0
     
     shutterTimeGet, ok := r.URL.Query()["shutter_time_ms"]
     if ok && len(shutterTimeGet[0]) > 0 {
@@ -290,9 +292,17 @@ func piImage(w http.ResponseWriter, r *http.Request) {
         }
     }
 
+    exposGet, ok := r.URL.Query()["expos"]
+    if ok && len(exposGet[0]) > 0 {
+        parsedVal, err := strconv.ParseInt(exposGet[0], 10, 32)
+        if err == nil {
+            exposCorrection = uint32(parsedVal)
+        }
+    }
+
     //log.Printf("Pi image request params: %d %d", shutterTime, iso)
 
-    imageData, imageError := getPiCameraImage(shutterTime, iso)
+    imageData, imageError := getPiCameraImage(shutterTime, iso, exposCorrection)
     if imageError == nil {
         w.Header().Set("Content-Type", "image/jpeg")
         w.Header().Set("Content-Length", strconv.Itoa(len(imageData)))
