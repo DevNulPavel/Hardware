@@ -15,6 +15,7 @@ import (
     "./resize"
     //"github.com/gorilla/sessions"
     "./sessions"
+    "./rf24"
 )
 
 const ODROID_ADDRESS = "http://192.168.1.7:8080"
@@ -371,6 +372,8 @@ func root(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+    rf24.Test()
+
     gob.Register(sesKey(0))
 
     http.HandleFunc("/", root)
