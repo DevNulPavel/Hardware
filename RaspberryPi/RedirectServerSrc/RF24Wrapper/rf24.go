@@ -10,7 +10,7 @@ import "C"
 import "unsafe"
 import "fmt"
 
-type RF24Command int32
+type RF24Command uint8
 const (
     CMD_GET_STATUS RF24Command = RF24Command(C.CMD_GET_STATUS)
     CMD_LIGHT_AUTO RF24Command = RF24Command(C.CMD_LIGHT_AUTO)
@@ -18,14 +18,14 @@ const (
     CMD_LIGHT_OFF RF24Command = RF24Command(C.CMD_LIGHT_OFF)
 )
 
-type RF24Status int32
+type RF24Status uint8
 const (
     ST_LIGHT_AUTO RF24Status = RF24Status(C.ST_LIGHT_AUTO)
     ST_LIGHT_ON RF24Status = RF24Status(C.ST_LIGHT_ON)
     ST_LIGHT_OFF RF24Status = RF24Status(C.ST_LIGHT_OFF)
 )
 
-type RF24Error int32
+type RF24Error uint8
 const (
     ERR_OK RF24Error = RF24Error(C.ERR_OK)
     ERR_WRITE_FAILED RF24Error = RF24Error(C.ERR_WRITE_FAILED)
@@ -35,12 +35,13 @@ const (
 
 type RF24Result struct{
     Status RF24Status
-    LightVal uint32
+    Enabled uint8
+    LightVal uint16
 }
 
 
 func NewRF24Result() RF24Result {
-    return RF24Result{ST_LIGHT_AUTO, 0}
+    return RF24Result{ST_LIGHT_AUTO, 0, 0}
 }
 
 func BeginRF24(){

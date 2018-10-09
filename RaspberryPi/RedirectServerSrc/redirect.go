@@ -391,7 +391,7 @@ func rf24Page(w http.ResponseWriter, r *http.Request) {
 
     var statusText string = ""
     if err == nil {
-        statusText = fmt.Sprintf("Current status: %d, light value: %d", status.Status, status.LightVal)        
+        statusText = fmt.Sprintf("Current mode: %d, enabled: %d, light value: %d", status.Status, status.Enabled, status.LightVal)        
     }else{
         statusText = err.Error()
     }

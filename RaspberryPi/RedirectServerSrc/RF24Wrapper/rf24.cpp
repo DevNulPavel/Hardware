@@ -15,10 +15,14 @@ RF24 radio(RPI_BPLUS_GPIO_J8_15, RPI_BPLUS_GPIO_J8_24, BCM2835_SPI_SPEED_8MHZ);
 
 void RF24Begin(){
     radio.begin();
-    radio.setRetries(15,15);
-    radio.printDetails();
+    radio.setRetries(15, 15);
+    radio.setDataRate(RF24_250KBPS);
+    radio.setPALevel(RF24_PA_HIGH);
+    //radio.enableAckPayload();
+    radio.setAutoAck(true);
     radio.openWritingPipe(pipes[1]);
     radio.openReadingPipe(1, pipes[0]);
+    radio.printDetails();
 }
 
 void RF24Ping(){
@@ -61,13 +65,13 @@ RF24Error RF24SendCommand(RF24Command command, RF24Result* result){
 
     bool ok = radio.write(&command, sizeof(char));
     if (!ok){
-        printf("RF24 write failed\n");
+        printf("RF24 send failed\n");
         return ERR_WRITE_FAILED;
     }
 
     radio.startListening();
 
-    const unsigned long timeoutMilliSec = 5000;
+    const unsigned long timeoutMilliSec = 3000;
     unsigned long startedWaitingAt = millis();
     bool timeout = false;
     while(!radio.available() && !timeout) {
@@ -83,8 +87,7 @@ RF24Error RF24SendCommand(RF24Command command, RF24Result* result){
         return ERR_TIMEOUT;
     }
 
-    radio.read(&(*result).status, sizeof((*result).status));
-    radio.read(&(*result).lightVal, sizeof((*result).lightVal)); // Надо ли учитывать порядок байтов??
+    radio.read(result, sizeof(RF24Result)); // TODO: Надо ли учитывать порядок байтов??
 
     return ERR_OK;
 }

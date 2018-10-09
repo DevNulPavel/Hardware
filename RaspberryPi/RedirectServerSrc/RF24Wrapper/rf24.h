@@ -27,8 +27,9 @@ typedef enum {
 } RF24Error;
 
 typedef struct RF24Result{
-    unsigned int status; // RF24Status
-    unsigned int lightVal;
+    unsigned char status; // RF24Status
+    unsigned char enabled;
+    unsigned short lightVal;
 } RF24Result;
 
 
