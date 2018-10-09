@@ -63,15 +63,22 @@ RF24Error RF24SendCommand(RF24Command command, RF24Result* result){
         return ERR_NO_RESULT_PTR;
     }
 
-    bool ok = radio.write(&command, sizeof(char));
-    if (!ok){
-        printf("RF24 write to receiver failed\n");
+    const unsigned long timeoutMilliSec = 200;
+
+    unsigned long startedSendAt = millis();
+    bool writeTimeout = false;
+    while(!radio.write(&command, sizeof(char)) && !writeTimeout) {
+        if ((millis() - startedSendAt) > timeoutMilliSec){
+            writeTimeout = true;
+        }
+    }
+    if (writeTimeout){
+        printf("RF24 write to target failed\n");
         return ERR_WRITE_FAILED;
     }
 
     radio.startListening();
 
-    const unsigned long timeoutMilliSec = 200;
     unsigned long startedWaitingAt = millis();
     bool timeout = false;
     while(!radio.available() && !timeout) {

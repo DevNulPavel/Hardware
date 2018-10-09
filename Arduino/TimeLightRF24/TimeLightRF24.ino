@@ -148,7 +148,7 @@ void loop() {
                 
         radio.stopListening();
         
-        delay(25);
+        delay(15);
 
         // Формируем результат
         RF24Result result;
@@ -159,6 +159,8 @@ void loop() {
         // Отправка результата
         // TODO: Подтверждение отправки???
         radio.write(&result, sizeof(RF24Result));
+
+        delay(15);
         
         radio.startListening();
     }
