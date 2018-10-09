@@ -115,16 +115,16 @@ const RF24_PAGE = `
         <br>
         <br>
         <form action="/rf24_control" method="get">
+            <input type="hidden" name="light" value="auto"/>
+            <button type="submit">Light AUTO</button>
+        </form>
+        <form action="/rf24_control" method="get">
             <input type="hidden" name="light" value="on"/>
             <button type="submit">Light ON</button>
         </form>
         <form action="/rf24_control" method="get">
             <input type="hidden" name="light" value="off"/>
             <button type="submit">Light OFF</button>
-        </form>
-        <form action="/rf24_control" method="get">
-            <input type="hidden" name="light" value="auto"/>
-            <button type="submit">Light AUTO</button>
         </form>
       </div>
     </div>

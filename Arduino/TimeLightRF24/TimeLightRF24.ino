@@ -60,7 +60,6 @@ void setup()    {
     radio.setAutoAck(true);
     radio.openWritingPipe(addresses[0]);
     radio.openReadingPipe(1, addresses[1]);
-    radio.printDetails();
     radio.startListening();
 }
 
@@ -125,7 +124,7 @@ void loop() {
         // Читаем команду
         byte command = 0;
         radio.read(&command, sizeof(command));
-        
+       
         #ifdef LOG_RF24
             Serial.print("Command received: ");
             Serial.print(command);
@@ -146,17 +145,21 @@ void loop() {
                 currentMode = ST_LIGHT_OFF;
             }break;
         }
+                
+        radio.stopListening();
+        
+        delay(25);
 
         // Формируем результат
         RF24Result result;
         result.status = currentMode;
         result.enabled = onStatus;
         result.lightVal = analogRead(PHOTO_PIN);
-
+        
         // Отправка результата
         // TODO: Подтверждение отправки???
-        radio.stopListening();
         radio.write(&result, sizeof(RF24Result));
+        
         radio.startListening();
     }
 }
