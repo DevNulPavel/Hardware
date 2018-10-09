@@ -46,6 +46,7 @@ const MAIN_PAGE = `
     <p><a href="pi_image?shutter_time_ms=4000&iso=800&expos=0">Pi image (Night)</a></p>
     <p><a href="pi_image?shutter_time_ms=200&iso=100&expos=0">Pi image (Day)</a></p>
     <p><a href="pi_custom">Pi image (Custom)</a></p>
+    <p><a href="rf24_page">RF24 control</a></p>
 </body>
 </html>
 `
@@ -86,11 +87,44 @@ const CUSTOM_PI_CAMERA_PAGE = `
     <div>
       <div>
         <form action="/pi_image" method="get">
-          Shutter time (mSec): <input type="text" placeholder="in mSec" value="330" name="shutter_time_ms">
-          ISO: <input type="text" placeholder="100-800" value="800" name="iso">
-          Expos correction: <input type="text" placeholder="-10<->10" value="0" name="expos">
-          <br>
-          <button type="submit">Go to image</button>
+            Shutter time (mSec): <input type="text" placeholder="in mSec" value="330" name="shutter_time_ms">
+            ISO: <input type="text" placeholder="100-800" value="800" name="iso">
+            Expos correction: <input type="text" placeholder="-10<->10" value="0" name="expos">
+            <br>
+            <button type="submit">Go to image</button>
+        </form>
+      </div>
+    </div>
+</body>
+</html>
+`
+
+//////////////////////////////////////////
+// RF24 control
+
+const RF24_PAGE = `
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>Main page</title>
+</head>
+<body>
+    <div>
+      <div>
+        %s
+        <br>
+        <br>
+        <form action="/rf24_control" method="get">
+            <input type="hidden" name="light" value="on"/>
+            <button type="submit">Light ON</button>
+        </form>
+        <form action="/rf24_control" method="get">
+            <input type="hidden" name="light" value="off"/>
+            <button type="submit">Light OFF</button>
+        </form>
+        <form action="/rf24_control" method="get">
+            <input type="hidden" name="light" value="auto"/>
+            <button type="submit">Light AUTO</button>
         </form>
       </div>
     </div>
@@ -323,6 +357,48 @@ func piImageCustom(w http.ResponseWriter, r *http.Request) {
     fmt.Fprint(w, CUSTOM_PI_CAMERA_PAGE)
 }
 
+func rf24Control(w http.ResponseWriter, r *http.Request) {
+    if !checkLogin(w, r) {
+        return
+    }
+
+    var mode string = ""
+
+    valueGet, ok := r.URL.Query()["light"]
+    if ok && len(valueGet[0]) > 0 {
+        mode = valueGet[0]
+    }
+
+    if mode == "auto" {
+        RF24Wrapper.SendCommandToRF24(RF24Wrapper.CMD_LIGHT_AUTO)
+    }else if mode == "on" {
+        RF24Wrapper.SendCommandToRF24(RF24Wrapper.CMD_LIGHT_ON)
+    } else if mode == "off" {
+        RF24Wrapper.SendCommandToRF24(RF24Wrapper.CMD_LIGHT_OFF)
+    }
+
+    // TODO: Можно ли получить старую страницу???
+    // Redirect to control page
+    http.Redirect(w, r, "/rf24_page", http.StatusSeeOther)
+}
+
+func rf24Page(w http.ResponseWriter, r *http.Request) {
+    if !checkLogin(w, r) {
+        return
+    }
+
+    status, err := RF24Wrapper.SendCommandToRF24(RF24Wrapper.CMD_GET_STATUS)
+
+    var statusText string = ""
+    if err == nil {
+        statusText = fmt.Sprintf("Current status: %d, light value: %d", status.Status, status.LightVal)        
+    }else{
+        statusText = err.Error()
+    }
+
+    fmt.Fprintf(w, RF24_PAGE, statusText)
+}
+
 func login(w http.ResponseWriter, r *http.Request) {
     ses, err := cookieStore.Get(r, cookieName)
     if err != nil {
@@ -372,7 +448,7 @@ func root(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-    RF24Wrapper.Test()
+    RF24Wrapper.BeginRF24()
 
     gob.Register(sesKey(0))
 
@@ -384,7 +460,8 @@ func main() {
     http.HandleFunc("/digma_video", digmaVideo)
     http.HandleFunc("/digma_small", digmaImageSmall)
     http.HandleFunc("/pi_image", piImage)
-    http.HandleFunc("/pi_custom", piImageCustom)
+    http.HandleFunc("/rf24_page", rf24Page)
+    http.HandleFunc("/rf24_control", rf24Control)
     err := http.ListenAndServe(":8080", nil)
     if err != nil {
         log.Fatal("ListenAndServe: ", err)

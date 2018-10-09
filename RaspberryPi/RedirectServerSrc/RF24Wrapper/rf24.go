@@ -8,7 +8,7 @@ package RF24Wrapper
 import "C"
 
 import "unsafe"
-import "log"
+import "fmt"
 
 type RF24Command int32
 const (
@@ -34,8 +34,8 @@ const (
 )
 
 type RF24Result struct{
-    status RF24Status
-    lightVal uint32
+    Status RF24Status
+    LightVal uint32
 }
 
 
@@ -43,19 +43,20 @@ func NewRF24Result() RF24Result {
     return RF24Result{ST_LIGHT_AUTO, 0}
 }
 
-func Test() {
+func BeginRF24(){
+    C.RF24Begin()    
+}
+
+func SendCommandToRF24(command RF24Command) (RF24Result, error) {
     status := NewRF24Result()
 
-    C.RF24Begin()
-
-    commandC := (C.RF24Command)(CMD_GET_STATUS)
+    commandC := (C.RF24Command)(command)
     resultPtrC := (*C.RF24Result)(unsafe.Pointer(&status))
     errorVal := RF24Error(C.RF24SendCommand(commandC, resultPtrC))
 
-    ok := false
-    if errorVal == ERR_OK {
-        ok = true
+    if errorVal != ERR_OK {
+        return NewRF24Result(), fmt.Errorf("RF24 command error: %d", errorVal)
     }
 
-    log.Printf("RF24 ok val: %v", ok)
+    return status, nil
 }
