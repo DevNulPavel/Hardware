@@ -157,8 +157,14 @@ void loop() {
         result.lightVal = analogRead(PHOTO_PIN);
         
         // Отправка результата
-        // TODO: Подтверждение отправки???
-        radio.write(&result, sizeof(RF24Result));
+        const unsigned long long timeoutTime = 1000;
+        bool timeout = false;
+        unsigned long long writeStartTime = millis();
+        while(!radio.write(&result, sizeof(RF24Result)) && !timeout){
+            if(millis() < (writeStartTime + timeoutTime)){
+                timeout = true;
+            }
+        }
 
         delay(15);
         
