@@ -372,7 +372,7 @@ func root(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-    //RF24Wrapper.Test()
+    RF24Wrapper.Test()
 
     gob.Register(sesKey(0))
 
