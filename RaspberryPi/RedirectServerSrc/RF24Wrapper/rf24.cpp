@@ -63,7 +63,7 @@ RF24Error RF24SendCommand(RF24Command command, RF24Result* result){
         return ERR_NO_RESULT_PTR;
     }
 
-    const unsigned long timeoutMilliSec = 200;
+    const unsigned long timeoutMilliSec = 400;
 
     unsigned long startedSendAt = millis();
     bool writeTimeout = false;

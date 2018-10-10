@@ -81,11 +81,15 @@ const CUSTOM_PI_CAMERA_PAGE = `
 <html>
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-    <title>Main page</title>
+    <title>Camera config page</title>
 </head>
 <body>
     <div>
       <div>
+        <a href="/">Main page</a>
+        <br>
+        <br>
+        <br>
         <form action="/pi_image" method="get">
             Shutter time (mSec): <input type="text" placeholder="in mSec" value="330" name="shutter_time_ms">
             ISO: <input type="text" placeholder="100-800" value="800" name="iso">
@@ -106,11 +110,15 @@ const RF24_PAGE = `
 <html>
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-    <title>Main page</title>
+    <title>RF24 page</title>
 </head>
 <body>
     <div>
       <div>
+        <a href="/">Main page</a>
+        <br>
+        <br>
+        <br>
         %s
         <br>
         <br>
@@ -460,6 +468,7 @@ func main() {
     http.HandleFunc("/digma_video", digmaVideo)
     http.HandleFunc("/digma_small", digmaImageSmall)
     http.HandleFunc("/pi_image", piImage)
+    http.HandleFunc("/pi_custom", piImageCustom)
     http.HandleFunc("/rf24_page", rf24Page)
     http.HandleFunc("/rf24_control", rf24Control)
     err := http.ListenAndServe(":8080", nil)
