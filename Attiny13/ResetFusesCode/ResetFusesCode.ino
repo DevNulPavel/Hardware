@@ -34,6 +34,7 @@ void setup() {
   pinMode(SDO, OUTPUT);     // Configured as input when in programming mode
   digitalWrite(RST, HIGH);  // Level shifter is inverting, this shuts off 12V
   Serial.begin(19200);
+  Serial.write("Type any symbol to flush fuses");
 }
 
 void loop() {
@@ -55,10 +56,19 @@ void loop() {
     Serial.println(sig, HEX);
     readFuses();
     if (sig == ATTINY13) {
+	  // http://we.easyelectronics.ru/digitdroid/attiny13a-s-zavoda---obychnyy-isp-vam-ne-pomozhet.html
+	  writeFuse(LFUSE, 0xFF);
+      writeFuse(HFUSE, 0xFF);
+	  
       writeFuse(LFUSE, 0x6A);
       writeFuse(HFUSE, 0xFF);
     } else if (sig == ATTINY24 || sig == ATTINY44 || sig == ATTINY84 ||
                sig == ATTINY25 || sig == ATTINY45 || sig == ATTINY85) {
+      // http://we.easyelectronics.ru/digitdroid/attiny13a-s-zavoda---obychnyy-isp-vam-ne-pomozhet.html
+	  writeFuse(LFUSE, 0xFF);
+      writeFuse(HFUSE, 0xFF);
+	  writeFuse(EFUSE, 0xFF);
+	  
       writeFuse(LFUSE, 0x62);
       writeFuse(HFUSE, 0xDF);
       writeFuse(EFUSE, 0xFF);

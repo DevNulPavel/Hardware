@@ -50,8 +50,8 @@
 //
 // A clock slow enough for an ATtiny85 @ 1 MHz, is a reasonable default:
 
-#define SPI_CLOCK (128000/6)
-
+//#define SPI_CLOCK 		(1000000/6)
+#define SPI_CLOCK            (128000/6)
 
 // Select hardware or software SPI, depending on SPI clock.
 // Currently only for AVR, for other architectures (Due, Zero,...), hardware SPI
@@ -59,16 +59,16 @@
 
 #if defined(ARDUINO_ARCH_AVR)
 
-/*#if SPI_CLOCK > (F_CPU / 128)
+#if SPI_CLOCK > (F_CPU / 128)
 #define USE_HARDWARE_SPI
-#endif*/
+#endif
 
 #endif
 
 // Configure which pins to use:
 
 // The standard pin configuration.
-//#ifndef ARDUINO_HOODLOADER2
+#ifndef ARDUINO_HOODLOADER2
 
 #define RESET     10 // Use pin 10 to reset the target rather than SS
 #define LED_HB    9
@@ -80,24 +80,24 @@
 
 #define USE_OLD_STYLE_WIRING
 
-//#ifdef USE_OLD_STYLE_WIRING
+#ifdef USE_OLD_STYLE_WIRING
 
 #define PIN_MOSI	11
 #define PIN_MISO	12
 #define PIN_SCK		13
 
-//#endif
+#endif
 
 // HOODLOADER2 means running sketches on the ATmega16U2 serial converter chips
 // on Uno or Mega boards. We must use pins that are broken out:
-/*#else
+#else
 
 #define RESET     	4
 #define LED_HB    	7
 #define LED_ERR   	6
 #define LED_PMODE 	5
 
-#endif*/
+#endif
 
 // By default, use hardware SPI pins:
 #ifndef PIN_MOSI
