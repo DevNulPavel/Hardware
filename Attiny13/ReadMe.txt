@@ -1,0 +1,1 @@
+При прошивке с помощью Arduino в SinaProg надо выбирать AVRISP, BR-19200
