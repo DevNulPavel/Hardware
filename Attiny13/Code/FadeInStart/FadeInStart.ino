@@ -21,7 +21,7 @@ void loop() {
             enabled = true;
 
             digitalWrite(OUT_PIN, HIGH);
-            delay(500);
+            delay(100);
             
             const int delayValue = (int)(FADE_IN_TIME_SEC/255.0f*1000.0);
             for(int i = 75; i <= 255; i++){
