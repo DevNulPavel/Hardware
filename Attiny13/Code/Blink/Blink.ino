@@ -1,7 +1,12 @@
 #define LED_BUILTIN 0
 
 void setup() {
-  pinMode(LED_BUILTIN, OUTPUT);
+    // Настраиваем низкое энергопотребление (Reset ножку не трогаем)
+    for(char i = 0; i <= 4; i++){
+        pinMode(i, OUTPUT);
+    }
+
+    pinMode(LED_BUILTIN, OUTPUT);
 }
 
 void loop() {

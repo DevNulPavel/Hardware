@@ -18,6 +18,11 @@ ISR(PCINT0_vect){
 }
 
 void setup() {
+    // Настраиваем низкое энергопотребление (Reset ножку не трогаем)
+    for(char i = 0; i <= 4; i++){
+        pinMode(i, OUTPUT);
+    }
+
     pinMode(OUT_PIN, OUTPUT);
     pinMode(BUTTON_PIN, INPUT);
   
