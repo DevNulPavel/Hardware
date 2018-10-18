@@ -13,6 +13,11 @@
 #ifndef SET_BIT
     #define SET_BIT(SRC, BIT) (_SFR_BYTE(SRC) |= _BV(BIT))
 #endif
+#ifndef INVERT_BIT
+    #define INVERT_BIT(SRC, BIT) (_SFR_BYTE(SRC) ^= _BV(BIT))
+#endif
+
+
 
 volatile uint8_t i = 0;
 
@@ -45,13 +50,18 @@ int main(void) {
     WDTCR |= (1<<WDTIE); // Разрешаем прерывания по ватчдогу. Иначе будет резет.
     SREG |= (1<<SREG_I); // Разрешаем прерывания, sei();
 
-    // Включаем полный режим сна
-    MCUCR = 0x30; // set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+    // Включаем полный режим сна, прерывание будет по таймеру WatchDog
+    MCUCR |= (1<<SM1);  // Включаем power down mode, set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+    MCUCR &= ~(1<<SM0); // Включаем power down mode, set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+    MCUCR |= (1<<SE);   // Включаем режим сна, sleep_enable();
 
     // Главный цикл
     while(1) {
-        MCUCR |= (1<<SE); // Разрешаем сон, sleep_enable();
-        asm("sleep"); // Спать, sleep_cpu();
+        // Включаем сон
+        MCUCR |= (1<<SE);   // Включаем режим сна, sleep_enable();
+
+        // Просто перекидываем процессор в сон, пробуждение по прерыванию
+        asm("sleep"); // sleep_cpu();
     }
     
     return 0;

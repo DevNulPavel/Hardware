@@ -12,6 +12,9 @@
 #ifndef SET_BIT
     #define SET_BIT(SRC, BIT) (_SFR_BYTE(SRC) |= _BV(BIT))
 #endif
+#ifndef INVERT_BIT
+    #define INVERT_BIT(SRC, BIT) (_SFR_BYTE(SRC) ^= _BV(BIT))
+#endif
 
 volatile uint8_t i = 0;
 
@@ -40,7 +43,7 @@ int main(void) {
     // Настройка PB0 порта на вывод
     DDRB |= (1<<PB0);
 
-    // Настройки режима сна
+    // Настройки режима сна, режим SLEEP_MODE_IDLE, чтобы работали таймеры?
     MCUCR &= ~(1<<SM1); // Включаем idle mode, set_sleep_mode (SLEEP_MODE_IDLE);
     MCUCR &= ~(1<<SM0); // Включаем idle mode, set_sleep_mode (SLEEP_MODE_IDLE);
     MCUCR |= (1<<SE);   // Включаем режим сна, sleep_enable();
@@ -49,7 +52,10 @@ int main(void) {
     SREG |= (1<<SREG_I); // Разрешаем прерывания, sei();
 
     // Главный цикл
-    for (;;) {
+    while(1) {
+        // Включаем сон
+        MCUCR |= (1<<SE);   // Включаем режим сна, sleep_enable();
+
         // Просто перекидываем процессор в сон, пробуждение по прерыванию
         asm("sleep"); // sleep_cpu();
 
