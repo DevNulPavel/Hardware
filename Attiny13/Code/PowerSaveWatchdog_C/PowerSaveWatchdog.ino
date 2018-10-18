@@ -16,6 +16,9 @@
 #ifndef INVERT_BIT
     #define INVERT_BIT(SRC, BIT) (_SFR_BYTE(SRC) ^= _BV(BIT))
 #endif
+#ifndef BIT_IS_SET
+    #define BIT_IS_SET(SRC, BIT) (_SFR_BYTE(SRC) & _BV(BIT))
+#endif
 
 
 

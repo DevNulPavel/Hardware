@@ -1,4 +1,5 @@
 // http://osboy.ru/blog/microcontrollers/attiny13-pwm.html
+// http://www.customelectronics.ru/avr-apparatnyiy-shim-mikrokontrollera/
 
 
 #define F_CPU 1200000UL  // Частота 1.2Mhz
@@ -16,6 +17,9 @@
 #ifndef INVERT_BIT
     #define INVERT_BIT(SRC, BIT) (_SFR_BYTE(SRC) ^= _BV(BIT))
 #endif
+#ifndef BIT_IS_SET
+    #define BIT_IS_SET(SRC, BIT) (_SFR_BYTE(SRC) & _BV(BIT))
+#endif
 
 
 int main(void) {
@@ -24,9 +28,17 @@ int main(void) {
     PORTB &= ~(1 << PB0); // Низкий уровень
 
     // Таймер для ШИМ на ножке PB0
-    TCCR0B = (1<<CS01); // 0x02, предделитель тактовой частоты CLK/8 (биты CS02, CS01, CS00)
-    TCCR0A = (1<<WGM01) | (1<<WGM00); // Настраиваем режим шим (биты WGM01, WGM00)
-    TCCR0A = (1<<COM0A1); // Настраиваем неинверсный режим (биты COM0A1, COM0A0) (может лучше инверсный?)
+    // 0x02, предделитель тактовой частоты CLK/8 (биты CS02, CS01, CS00)
+    TCCR0B &= ~(1<<CS02);
+    TCCR0B |= (1<<CS01);
+    TCCR0B &= ~(1<<CS00);
+    // Настраиваем режим быстрого шим (биты WGM01, WGM00)
+    TCCR0A |= (1<<WGM01) | (1<<WGM00);
+    // Настраиваем неинверсный режим (биты COM0A1, COM0A0) (может лучше инверсный?)
+    TCCR0A |= (1<<COM0A1);
+    TCCR0A &= ~(1<<COM0A0);
+
+    // Обнуление счетчиков
     TCNT0 = 0; // Начальное значение счётчика
     OCR0A = 0; // Регистр совпадения A, ножка PB0
 
