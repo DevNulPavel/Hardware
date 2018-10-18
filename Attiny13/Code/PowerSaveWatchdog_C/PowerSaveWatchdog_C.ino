@@ -49,7 +49,7 @@ int main(void) {
     DDRB |= (1<<PB0);
 
     // Настройка WatchDog
-    asm(«wdr»);    // Сбрасываем, wdt_reset();
+    asm("wdr");    // Сбрасываем, wdt_reset();
     wdt_enable(WDTO_1S); // Разрешаем ватчдог 1 сек, отключение - wdt_disable()
     WDTCR |= (1<<WDTIE); // Разрешаем прерывания по ватчдогу. Иначе будет резет.
     SREG |= (1<<SREG_I); // Разрешаем прерывания, sei();

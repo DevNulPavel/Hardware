@@ -34,7 +34,7 @@ ISR(PCINT0_vect) {
     keyInterrupt = true;
 }
 
-bool isButtonPressedNoChatter(char port){
+bool isButtonPressedUpNoChatter(char port){
     bool buttonPressed = ((PINB & (1 << port)) == 0); // Если низкий уровень - то кнопка нажата
     if (buttonPressed){
         _delay_ms(10); // Ждем чтобы избавиться от дребезга
@@ -70,6 +70,7 @@ int main(void) {
 
     // В регистр энергосбережения PRADC (отключение ADC преобразователя)
     // PRR = (1<<PRADC);
+    // PRR &= ~(1<<PRTIM0);
 
     // Отключение AЦП
     ADCSRA &= ~(1 << ADEN);
@@ -110,11 +111,11 @@ int main(void) {
 
         // Если было прерывание - обрабатываем его
         if (keyInterrupt){
-            bool buttonPressed = isButtonPressedNoChatter(PB1);
+            bool buttonPressed = isButtonPressedUpNoChatter(PB1);
             if (buttonPressed){
                 PORTB ^= (1<<PB0);  // Переключаем значение на пине PB0
             }
-
+            
             keyInterrupt = false;
         }
     }
