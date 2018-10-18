@@ -7,6 +7,7 @@
 
 #define F_CPU 1200000UL  // Частота 1.2Mhz
 #include <avr/io.h>
+#include <avr/wdt.h>
 #include <util/delay.h>
 #include <avr/interrupt.h>
 
@@ -32,6 +33,7 @@ ISR(PCINT0_vect) {
 
 int main(void) {
     // TODO: Отключение WatchDog
+    wdt_disable();
 
     // Выставить порты в конкретное состояние InputPullup, чтобы по ним не происходили прерывания
     {

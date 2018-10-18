@@ -7,7 +7,7 @@ bool enabled = false;
 void setup() {
     // Настраиваем низкое энергопотребление (Reset ножку не трогаем)
     for(char i = 0; i <= 4; i++){
-        pinMode(i, OUTPUT);
+        pinMode(i, INPUT_PULLUP);
     }
 
     pinMode(OUT_PIN, OUTPUT);
