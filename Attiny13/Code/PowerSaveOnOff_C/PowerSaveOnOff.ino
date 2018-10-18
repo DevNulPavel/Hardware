@@ -31,6 +31,15 @@ ISR(PCINT0_vect) {
     keyInterrupt = true;
 }
 
+bool isButtonPressedNoChatter(char port){
+    bool buttonPressed = ((PINB & (1 << port)) == 0); // Если низкий уровень - то кнопка нажата
+    if (buttonPressed){
+        _delay_ms(10); // Ждем чтобы избавиться от дребезга
+        buttonPressed = ((PINB & (1 << port)) == 0); // Если низкий уровень - то кнопка нажата
+    }
+    return buttonPressed;
+}
+
 int main(void) {
     // TODO: Отключение WatchDog
     wdt_disable();
@@ -98,13 +107,9 @@ int main(void) {
 
         // Если было прерывание - обрабатываем его
         if (keyInterrupt){
-            bool buttonPressed = ((PINB & (1<<PB1)) == 0); // Если низкий уровень - то кнопка нажата
+            bool buttonPressed = isButtonPressedNoChatter(PB1);
             if (buttonPressed){
-                _delay_ms(10); // Ждем чтобы избавиться от дребезга
-                buttonPressed = ((PINB & (1<<PB1)) == 0); // Если низкий уровень - то кнопка нажата
-                if (buttonPressed){
-                    PORTB ^= (1<<PB0);  // Переключаем значение на пине PB0
-                }
+                PORTB ^= (1<<PB0);  // Переключаем значение на пине PB0
             }
 
             keyInterrupt = false;
