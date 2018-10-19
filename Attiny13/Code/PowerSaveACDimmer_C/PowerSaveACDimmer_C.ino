@@ -26,24 +26,26 @@
     #define BIT_IS_SET(SRC, BIT) (_SFR_BYTE(SRC) & _BV(BIT))
 #endif
 
+// За одну миллисекунду у нас будет 150 прерываний
+#define MS_TO_INTERRUPTS(MS) MS*150
 
 const unsigned char MODES_POWERS_COUNT = 5;
-const float MODES_POWERS[] = {
-    0.2f,
-    0.4f,
-    0.6f,
-    0.8f,
-    1.0f
+const char MODES_POWERS[] = {
+    20, // Процентов
+    40, // Процентов
+    60, // Процентов
+    80, // Процентов
+    100 // Процентов
 };
 
 volatile bool hasACInterrupt = false;
 volatile bool hasKeyInterrupt = false;
-volatile double millisVal = 0.0;
+volatile unsigned int timerInterrupts = 0;
 
 bool outEnabled = false;
-double disabledEndTimeMs = 0.0;
-double enabledEndTimeMs = 0.0;
-double buttonCheckTimeMs = 0.0;
+unsigned int disabledEndTime = 0;
+unsigned int enabledEndTime = 0;
+unsigned int buttonCheckTime = 0;
 unsigned char powerMode = 0;
 
 
@@ -62,16 +64,15 @@ ISR(PCINT0_vect) {
 // Обработчик прерывания переполнения таймера
 ISR(TIM0_OVF_vect) {
     // За одну миллисекунду у нас будет 150 прерываний
-    const double delta = 1.0/150.0;
-    millisVal += delta;
+    timerInterrupts++;
 
-    // Сброс при переполнении
-    const unsigned int maxVal = 1000*60*60*24;
-    if (millisVal > maxVal){
-        millisVal = 0.0;
-        disabledEndTimeMs = 0.0;
-        enabledEndTimeMs = 0.0;
-        buttonCheckTimeMs = 0.0;
+    // Сброс при переполнении каждый час
+    const unsigned long maxVal = MS_TO_INTERRUPTS(1000*60*60*1);
+    if (timerInterrupts > maxVal){
+        timerInterrupts = 0;
+        disabledEndTime = 0;
+        enabledEndTime = 0;
+        buttonCheckTime = 0;
     }
 }
 
@@ -117,7 +118,7 @@ void setupMillisTimer(){
     TCCR0B &= ~(1<<CS02);
     TCCR0B &= ~(1<<CS01);
     TCCR0B &= ~(1<<CS00); 
-
+    
     // Настраиваем количество тиков при котором произойдет прерывание,
     // при делителе 8: 1/(1.2MHz/8) = 6.666us каждый тик, 150 тиков - 1ms
     TCCR0B |= (1<<FOC0A);  // Включаем сравнение с маской
@@ -127,7 +128,7 @@ void setupMillisTimer(){
     TCNT0 = 0; // Начальное значение счётчика
 
     // Обнуление времени
-    millisVal = 0.0;
+    timerInterrupts = 0;
 }
 
 void enableMillisTimer(){
@@ -139,8 +140,9 @@ void enableMillisTimer(){
 
     // Обнуление счетчика
     TCNT0 = 0;
+    
     // Обнуление времени
-    millisVal = 0.0;
+    timerInterrupts = 0;
 }
 
 void disableMillisTimer(){
@@ -151,7 +153,7 @@ void disableMillisTimer(){
     // Обнуление счетчика
     TCNT0 = 0;
     // Обнуление времени
-    millisVal = 0.0;
+    timerInterrupts = 0;
 }
 
 void setupACInterrupts(){
@@ -215,7 +217,7 @@ void setup(){
     // Настройка счетчика времени
     setupMillisTimer();
 
-    // Запускаем счетчик миллисекунд
+    // Запускаем таймер
     enableMillisTimer();
 
     // Настройка прерываний детектирования нуля
@@ -230,26 +232,26 @@ void setup(){
     // Обнуление переменных
     hasACInterrupt = false;
     hasKeyInterrupt = false;
-    millisVal = 0.0;
+    timerInterrupts = 0;
     outEnabled = false;
-    disabledEndTimeMs = 0.0;
-    enabledEndTimeMs = 0.0;
-    buttonCheckTimeMs = 0.0;
-    powerMode = 0.0;
+    disabledEndTime = 0;
+    enabledEndTime = 0;
+    buttonCheckTime = 0;
+    powerMode = 0;
 }
 
 void loop(){
     // Пока есть было прерывания - обрабатываем
     if(hasACInterrupt){
-        const float powerACValue = MODES_POWERS[powerMode];
-        const float zeroCrossPeriodTimeMs = 1.0f/50.0f/2.0f * 1000.0f;
-        const float enabledMsDuration = powerACValue * zeroCrossPeriodTimeMs;
+        const char powerACValue = MODES_POWERS[powerMode];
+        const unsigned short zeroCrossPeriodTime = MS_TO_INTERRUPTS(1000/50/2);
+        const unsigned short enabledDuration = powerACValue * zeroCrossPeriodTime / 100;
 
         PORTB &= ~(1<<PB0); // Выход на порте PB0 выключен
 
         // Пропускать будем с середины полуволны и расширять ее
-        disabledEndTimeMs = millisVal + zeroCrossPeriodTimeMs/2.0f - enabledMsDuration/2.0f;
-        enabledEndTimeMs = millisVal + zeroCrossPeriodTimeMs/2.0f + enabledMsDuration/2.0f;
+        disabledEndTime = timerInterrupts + zeroCrossPeriodTime/2 - enabledDuration/2;
+        enabledEndTime = timerInterrupts + zeroCrossPeriodTime/2 + enabledDuration/2;
 
         hasACInterrupt = false;
     }
@@ -259,13 +261,13 @@ void loop(){
         // Если низкий уровень - то кнопка нажата
         bool buttonPressed = ((PINB & (1 << PB2)) == 0);
         if (buttonPressed){
-            buttonCheckTimeMs = millisVal + 5; //  Окончательную проверку дребезга сделаем через 5 миллисекунд
+            buttonCheckTime = timerInterrupts + MS_TO_INTERRUPTS(5); //  Окончательную проверку дребезга сделаем через 5 миллисекунд
         }
         hasKeyInterrupt = false;
     }
 
     // Выполняем обработку антидребезга
-    if (buttonCheckTimeMs && (millisVal > buttonCheckTimeMs)){
+    if (buttonCheckTime && (timerInterrupts > buttonCheckTime)){
         bool buttonPressed = ((PINB & (1 << PB2)) == 0); // Если низкий уровень - то кнопка нажата
         if (buttonPressed){
             outEnabled = !outEnabled;
@@ -280,11 +282,11 @@ void loop(){
             }
         }
 
-        buttonCheckTimeMs = 0;
+        buttonCheckTime = 0;
     }
 
     // Включаем выход если настало время
-    if (disabledEndTimeMs && (millisVal > disabledEndTimeMs)){
+    if (disabledEndTime && (timerInterrupts > disabledEndTime)){
         if (outEnabled) {
             // Выход на порте PB0 включен
             PORTB |= (1<<PB0);
@@ -295,13 +297,13 @@ void loop(){
     }
     
     // Выключаем выход если настало время
-    if (enabledEndTimeMs && (millisVal > enabledEndTimeMs)){
+    if (enabledEndTime && (timerInterrupts > enabledEndTime)){
         // Выход на порте PB0 выключен
         PORTB &= ~(1<<PB0);
 
         // Обнуляем переменные диммера
-        disabledEndTimeMs = 0;
-        enabledEndTimeMs = 0;
+        disabledEndTime = 0;
+        enabledEndTime = 0;
     }
 
     // Проверяем, не было ли новых прерываний в процессе работы итерации цикла
