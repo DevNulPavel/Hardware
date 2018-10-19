@@ -59,7 +59,7 @@ ISR(PCINT0_vect) {
     hasKeyInterrupt = true;
 }
 
-// Обработчик прерывания по таймеру
+// Обработчик прерывания переполнения таймера
 ISR(TIM0_OVF_vect) {
     // За одну миллисекунду у нас будет 150 прерываний
     const double delta = 1.0/150.0;
@@ -93,7 +93,7 @@ void initialSetupOutPorts(){
     PORTB |= (1<<PB4); // Делаем кнопку на порте подтянутой к ВЫСОКОМУ уровню, подключать к земле
 }
 
-void setupPoserSaveRegisters(){
+void setupPowerSaveRegisters(){
     // В регистр энергосбережения записываем PRTIM0 (отключение счетчика) и PRADC (отключение ADC преобразователя)
     //PRR = (1<<PRTIM0) | (1<<PRADC);
 
@@ -195,7 +195,7 @@ void setup(){
     initialSetupOutPorts()
 
     // Настраиваем регистры энергосбереженияэ
-    setupPoserSaveRegisters();
+    setupPowerSaveRegisters();
 
     // Пин выхода PB0
     DDRB |= (1<<PB0); // Настраиваем выход PB0 как выход
