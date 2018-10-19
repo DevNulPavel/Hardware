@@ -38,13 +38,12 @@ const float MODES_POWERS[] = {
 
 volatile bool hasACInterrupt = false;
 volatile bool hasKeyInterrupt = false;
-volatile unsigned short timerInterrupts = 0;
-volatile unsigned long long millis = 0;
+volatile double millis = 0.0;
 
 bool outEnabled = false;
-unsigned long long disabledEndTimeMs = 0;
-unsigned long long enabledEndTimeMs = 0;
-unsigned long long buttonCheckTimeMs = 0;
+double disabledEndTimeMs = 0.0;
+double enabledEndTimeMs = 0.0;
+double buttonCheckTimeMs = 0.0;
 unsigned char powerMode = 0;
 
 
@@ -63,31 +62,29 @@ ISR(PCINT0_vect) {
 // Обработчик прерывания по таймеру
 ISR(TIM0_OVF_vect) {
     // За одну миллисекунду у нас будет 150 прерываний
-    if((++timerInterrupts % 150) == 0){
-        // Обнуляем счетчик прерываний и увеличиваем количество миллисекунд
-        timerInterrupts = 0;
-        millis++;
+    const double delta = 1.0/150.0;
+    millis += delta;
 
-        // Сброс при переполнении
-        if (millis > 1000*60*60*24){
-            millis = 0;
-            disabledEndTimeMs = 0;
-            enabledEndTimeMs = 0;
-            buttonCheckTimeMs = 0;
-        }
+    // Сброс при переполнении
+    const unsigned int maxVal = 1000*60*60*24;
+    if (millis > maxVal){
+        millis = 0.0;
+        disabledEndTimeMs = 0.0;
+        enabledEndTimeMs = 0.0;
+        buttonCheckTimeMs = 0.0;
     }
 }
 
 // Выставить порты в конкретное состояние InputPullup, чтобы по ним не происходили прерывания
 void initialSetupOutPorts(){
-    DDRB &= ~(1<<PB0); // Настраиваем кнопку на порте как вход
-    PORTB |= (1<<PB0); // Делаем кнопку на порте подтянутой к ВЫСОКОМУ уровню, подключать к земле
+    //DDRB &= ~(1<<PB0); // Настраиваем кнопку на порте как вход
+    //PORTB |= (1<<PB0); // Делаем кнопку на порте подтянутой к ВЫСОКОМУ уровню, подключать к земле
 
-    DDRB &= ~(1<<PB1); // Настраиваем кнопку на порте как вход
-    PORTB |= (1<<PB1); // Делаем кнопку на порте подтянутой к ВЫСОКОМУ уровню, подключать к земле
+    //DDRB &= ~(1<<PB1); // Настраиваем кнопку на порте как вход
+    //PORTB |= (1<<PB1); // Делаем кнопку на порте подтянутой к ВЫСОКОМУ уровню, подключать к земле
 
-    DDRB &= ~(1<<PB2); // Настраиваем кнопку на порте как вход
-    PORTB |= (1<<PB2); // Делаем кнопку на порте подтянутой к ВЫСОКОМУ уровню, подключать к земле
+    //DDRB &= ~(1<<PB2); // Настраиваем кнопку на порте как вход
+    //PORTB |= (1<<PB2); // Делаем кнопку на порте подтянутой к ВЫСОКОМУ уровню, подключать к земле
 
     DDRB &= ~(1<<PB3); // Настраиваем кнопку на порте как вход
     PORTB |= (1<<PB3); // Делаем кнопку на порте подтянутой к ВЫСОКОМУ уровню, подключать к земле
@@ -127,9 +124,9 @@ void setupMillisTimer(){
 
     // Обнуление счетчика
     TCNT0 = 0; // Начальное значение счётчика
-    // Обнуление количества прерываний
-    timerInterrupts = 0;
-    millis = 0;
+
+    // Обнуление времени
+    millis = 0.0;
 }
 
 void enableMillisTimer(){
@@ -140,22 +137,20 @@ void enableMillisTimer(){
     TCCR0B &= ~(1<<CS00); 
     // Обнуление счетчика
     TCNT0 = 0;
-    // Обнуление количества прерываний
-    timerInterrupts = 0;
-    millis = 0;
+    // Обнуление времени
+    millis = 0.0;
 }
 
-void disableMillisTimer(){
+/*void disableMillisTimer(){
     // Отключаем таймер
     TCCR0B &= ~(1<<CS02);
     TCCR0B &= ~(1<<CS01);
     TCCR0B &= ~(1<<CS00); 
     // Обнуление счетчика
     TCNT0 = 0;
-    // Обнуление количества прерываний
-    timerInterrupts = 0;
-    millis = 0;
-}
+    // Обнуление времени
+    millis = 0.0;
+}*/
 
 void setupACInterrupts(){
     // Настройка прерываний INT0 для детектирования нуля
@@ -190,7 +185,7 @@ void setupSleepMode(){
     return buttonPressed;
 }*/
 
-int main(void) {
+void setup(){
     // Отключение WatchDog
     wdt_disable();
 
@@ -234,87 +229,92 @@ int main(void) {
     hasACInterrupt = false;
     hasKeyInterrupt = false;
     timerInterrupts = 0;
-    millis = 0;
+    millis = 0.0;
     outEnabled = false;
-    disabledEndTimeMs = 0;
-    enabledEndTimeMs = 0;
-    buttonCheckTimeMs = 0;
-    powerMode = 0;
+    disabledEndTimeMs = 0.0;
+    enabledEndTimeMs = 0.0;
+    buttonCheckTimeMs = 0.0;
+    powerMode = 0.0;
+}
 
-    // Главный цикл
-    while(1) {
-        // Пока есть было прерывания - обрабатываем
-        if(hasACInterrupt){
-            const float powerACValue = MODES_POWERS[mode];
-            const float zeroCrossPeriodTimeMs = 1.0f/50.0f/2.0f * 1000.0f;
-            const float enabledMsDuration = powerACValue * zeroCrossPeriodTimeMs;
+void loop(){
+    // Пока есть было прерывания - обрабатываем
+    if(hasACInterrupt){
+        const float powerACValue = MODES_POWERS[mode];
+        const float zeroCrossPeriodTimeMs = 1.0f/50.0f/2.0f * 1000.0f;
+        const float enabledMsDuration = powerACValue * zeroCrossPeriodTimeMs;
 
-            PORTB &= ~(1<<PB0); // Выход на порте PB0 выключен
+        PORTB &= ~(1<<PB0); // Выход на порте PB0 выключен
 
-            // Пропускать будем с середины полуволны и расширять ее
-            disabledEndTimeMs = millis + periodTime/2 - enabledMsDuration/2.0f;
-            enabledEndTimeMs = millis + periodTime/2 + enabledMsDuration/2.0f;
+        // Пропускать будем с середины полуволны и расширять ее
+        disabledEndTimeMs = millis + zeroCrossPeriodTimeMs/2.0f - enabledMsDuration/2.0f;
+        enabledEndTimeMs = millis + zeroCrossPeriodTimeMs/2.0f + enabledMsDuration/2.0f;
 
-            hasACInterrupt = false;
+        hasACInterrupt = false;
+    }
+
+    // Если было прерывание кнопки - обрабатываем его
+    if (hasKeyInterrupt){
+        // Если низкий уровень - то кнопка нажата
+        bool buttonPressed = ((PINB & (1 << PB2)) == 0);
+        if (buttonPressed){
+            buttonCheckTimeMs = millis + 5; //  Окончательную проверку дребезга сделаем через 5 миллисекунд
         }
+        hasKeyInterrupt = false;
+    }
 
-        // Если было прерывание кнопки - обрабатываем его
-        if (hasKeyInterrupt){
-            // Если низкий уровень - то кнопка нажата
-            bool buttonPressed = ((PINB & (1 << PB2)) == 0);
-            if (buttonPressed){
-                buttonCheckTimeMs = millis + 5; //  Окончательную проверку дребезга сделаем через 5 миллисекунд
-            }
-            hasKeyInterrupt = false;
-        }
+    // Выполняем обработку антидребезга
+    if (buttonCheckTimeMs && (millis > buttonCheckTimeMs)){
+        bool buttonPressed = ((PINB & (1 << PB2)) == 0); // Если низкий уровень - то кнопка нажата
+        if (buttonPressed){
+            outEnabled = !outEnabled;
 
-        // Выполняем обработку антидребезга
-        if (buttonCheckTimeMs && (millis > buttonCheckTimeMs)){
-            bool buttonPressed = ((PINB & (1 << PB2)) == 0); // Если низкий уровень - то кнопка нажата
-            if (buttonPressed){
-                outEnabled = !outEnabled;
-
-                // Принудительно отключаем таймер для диммера
-                if (outEnabled) {
-                    // Выбираем новый режим
-                    mode = (mode + 1) % MODES_POWERS_COUNT;
-                }else{
-                    // Выход на порте PB0 выключен
-                    PORTB &= ~(1<<PB0);
-                }
-            }
-
-            buttonCheckTimeMs = 0;
-        }
-
-        // Включаем выход если настало время
-        if (disabledEndTimeMs && (millis > disabledEndTimeMs)){
+            // Принудительно отключаем таймер для диммера
             if (outEnabled) {
-                // Выход на порте PB0 включен
-                PORTB |= (1<<PB0);
+                // Выбираем новый режим
+                mode = (mode + 1) % MODES_POWERS_COUNT;
             }else{
                 // Выход на порте PB0 выключен
                 PORTB &= ~(1<<PB0);
             }
         }
-        
-        // Выключаем выход если настало время
-        if (enabledEndTimeMs && (millis > enabledEndTimeMs)){
-            // Выход на порте PB0 выключен
-            PORTB &= ~(1<<PB0);
 
-            // Обнуляем переменные диммера
-            disabledEndTimeMs = 0;
-            enabledEndTimeMs = 0;
-        }
-
-        // Проверяем, не было ли новых прерываний в процессе работы итерации цикла
-        if(!hasACInterrupt && !hasKeyInterrupt){
-            // Просто перекидываем процессор в сон, пробуждение по любому прерыванию
-            MCUCR |= (1<<SE);   // Включаем режим сна, sleep_enable();
-            asm("sleep"); // sleep_cpu();
-        }
+        buttonCheckTimeMs = 0;
     }
 
+    // Включаем выход если настало время
+    if (disabledEndTimeMs && (millis > disabledEndTimeMs)){
+        if (outEnabled) {
+            // Выход на порте PB0 включен
+            PORTB |= (1<<PB0);
+        }else{
+            // Выход на порте PB0 выключен
+            PORTB &= ~(1<<PB0);
+        }
+    }
+    
+    // Выключаем выход если настало время
+    if (enabledEndTimeMs && (millis > enabledEndTimeMs)){
+        // Выход на порте PB0 выключен
+        PORTB &= ~(1<<PB0);
+
+        // Обнуляем переменные диммера
+        disabledEndTimeMs = 0;
+        enabledEndTimeMs = 0;
+    }
+
+    // Проверяем, не было ли новых прерываний в процессе работы итерации цикла
+    if(!hasACInterrupt && !hasKeyInterrupt){
+        // Просто перекидываем процессор в сон, пробуждение по любому прерыванию
+        MCUCR |= (1<<SE);   // Включаем режим сна, sleep_enable();
+        asm("sleep"); // sleep_cpu();
+    }
+}
+
+int main(void) {
+    setup();
+    while(1) {
+        loop();
+    }
     return 0;
 }
