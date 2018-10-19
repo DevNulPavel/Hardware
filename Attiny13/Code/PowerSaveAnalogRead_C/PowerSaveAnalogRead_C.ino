@@ -180,6 +180,8 @@ void setup(){
 }
 
 void loop(){
+    // TODO: Прерывания по изменению значения PCIN0
+
     // Инициализируем рассчет
     ADCSRA |= (1<<ADSC);
     
@@ -187,29 +189,34 @@ void loop(){
     MCUCR |= (1<<SE);   // Включаем режим сна, sleep_enable();
     asm("sleep"); // sleep_cpu();
     
-    // Вычитываем значение, которое мы получили при аналоговом чтении
-    uint8_t l = ADCL;
-    uint8_t h = ADCH;
-    unsigned int analogValue = (h << 8) | l;
+    //while(ADCSRA & _BV(ADSC)); // Wait for conversion
 
-    // Выставляем выходное значение как шим
-    unsigned short digitalValue = static_cast<unsigned short>(analogValue*255/1024);
-    if (digitalValue == 0){
-        // Вырубаем ШИМ
-        disablePWMOut();
-        // Низкий уровень на пине PB0
-        PORTB &= ~(1<<PB0);
-    }else if(digitalValue == 255){
-        // Вырубаем ШИМ
-        disablePWMOut();
-        // Высокий уровень на пине PB0 постоянно
-        PORTB |= (1<<PB0);
-    }else{
-        // Включаем ШИМ
-        enablePWMOut();
-        // Ставим нужное значение ШИМ
-        OCR0A = digitalValue; // Выставляем значение ШИМ в регистр
-    }
+    // Проверяем, что вычисление завершилось
+    if(ADCSRA & (1<<ADSC)){
+        // Вычитываем значение, которое мы получили при аналоговом чтении
+        uint8_t l = ADCL;
+        uint8_t h = ADCH;
+        unsigned int analogValue = (h << 8) | l;
+
+        // Выставляем выходное значение как шим
+        unsigned short digitalValue = static_cast<unsigned short>(analogValue*255/1024);
+        if (digitalValue == 0){
+            // Вырубаем ШИМ
+            disablePWMOut();
+            // Низкий уровень на пине PB0
+            PORTB &= ~(1<<PB0);
+        }else if(digitalValue == 255){
+            // Вырубаем ШИМ
+            disablePWMOut();
+            // Высокий уровень на пине PB0 постоянно
+            PORTB |= (1<<PB0);
+        }else{
+            // Включаем ШИМ
+            enablePWMOut();
+            // Ставим нужное значение ШИМ
+            OCR0A = digitalValue; // Выставляем значение ШИМ в регистр
+        }
+    } 
 }
 
 int main(void) {
