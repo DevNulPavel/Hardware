@@ -38,12 +38,13 @@ const float MODES_POWERS[] = {
 
 volatile bool hasACInterrupt = false;
 volatile bool hasKeyInterrupt = false;
-volatile unsigned long timerInterrupts = 0;
-volatile unsigned long millis = 0;
+volatile unsigned short timerInterrupts = 0;
+volatile unsigned long long millis = 0;
 
 bool outEnabled = false;
-unsigned long disabledEndTimeMs = 0;
-unsigned long enabledEndTimeMs = 0;
+unsigned long long disabledEndTimeMs = 0;
+unsigned long long enabledEndTimeMs = 0;
+unsigned long long buttonCheckTimeMs = 0;
 unsigned char powerMode = 0;
 
 
@@ -63,8 +64,17 @@ ISR(PCINT0_vect) {
 ISR(TIM0_OVF_vect) {
     // За одну миллисекунду у нас будет 150 прерываний
     if((++timerInterrupts % 150) == 0){
+        // Обнуляем счетчик прерываний и увеличиваем количество миллисекунд
         timerInterrupts = 0;
         millis++;
+
+        // Сброс при переполнении
+        if (millis > 1000*60*60*24){
+            millis = 0;
+            disabledEndTimeMs = 0;
+            enabledEndTimeMs = 0;
+            buttonCheckTimeMs = 0;
+        }
     }
 }
 
@@ -171,14 +181,14 @@ void setupSleepMode(){
     MCUCR |= (1<<SE);   // Включаем режим сна, sleep_enable();
 }
 
-bool isButtonPressedUpNoChatter(char port){
+/*bool isButtonPressedUpNoChatter(char port){
     bool buttonPressed = ((PINB & (1 << port)) == 0); // Если низкий уровень - то кнопка нажата
     if (buttonPressed){
         _delay_ms(5); // Ждем чтобы избавиться от дребезга
         buttonPressed = ((PINB & (1 << port)) == 0); // Если низкий уровень - то кнопка нажата
     }
     return buttonPressed;
-}
+}*/
 
 int main(void) {
     // Отключение WatchDog
@@ -205,6 +215,9 @@ int main(void) {
     // Настройка счетчика времени
     setupMillisTimer();
 
+    // Запускаем счетчик миллисекунд
+    enableMillisTimer();
+
     // Настройка прерываний детектирования нуля
     setupACInterrupts();
 
@@ -225,6 +238,7 @@ int main(void) {
     outEnabled = false;
     disabledEndTimeMs = 0;
     enabledEndTimeMs = 0;
+    buttonCheckTimeMs = 0;
     powerMode = 0;
 
     // Главный цикл
@@ -237,9 +251,6 @@ int main(void) {
 
             PORTB &= ~(1<<PB0); // Выход на порте PB0 выключен
 
-            // Запускаем счетчик миллисекунд
-            enableMillisTimer();
-
             // Пропускать будем с середины полуволны и расширять ее
             disabledEndTimeMs = millis + periodTime/2 - enabledMsDuration/2.0f;
             enabledEndTimeMs = millis + periodTime/2 + enabledMsDuration/2.0f;
@@ -249,26 +260,35 @@ int main(void) {
 
         // Если было прерывание кнопки - обрабатываем его
         if (hasKeyInterrupt){
-            // Так как будет выключени или включен диммер - можно использовать здесь delay
-            const bool buttonPressed = isButtonPressedUpNoChatter(PB2);
+            // Если низкий уровень - то кнопка нажата
+            bool buttonPressed = ((PINB & (1 << PB2)) == 0);
             if (buttonPressed){
-                outEnabled = !outEnabled;
+                buttonCheckTimeMs = millis + 5; //  Окончательную проверку дребезга сделаем через 5 миллисекунд
             }
-
-            // Принудительно отключаем таймер для диммера
-            if (outEnabled) {
-                // Выбираем новый режим
-                mode = (mode + 1) % MODES_POWERS_COUNT;
-            }else{
-                // Выход на порте PB0 выключен
-                PORTB &= ~(1<<PB0);
-            }
-
             hasKeyInterrupt = false;
         }
 
+        // Выполняем обработку антидребезга
+        if (buttonCheckTimeMs && (millis > buttonCheckTimeMs)){
+            bool buttonPressed = ((PINB & (1 << PB2)) == 0); // Если низкий уровень - то кнопка нажата
+            if (buttonPressed){
+                outEnabled = !outEnabled;
+
+                // Принудительно отключаем таймер для диммера
+                if (outEnabled) {
+                    // Выбираем новый режим
+                    mode = (mode + 1) % MODES_POWERS_COUNT;
+                }else{
+                    // Выход на порте PB0 выключен
+                    PORTB &= ~(1<<PB0);
+                }
+            }
+
+            buttonCheckTimeMs = 0;
+        }
+
         // Включаем выход если настало время
-        if (millis && disabledEndTimeMs && (millis > disabledEndTimeMs)){
+        if (disabledEndTimeMs && (millis > disabledEndTimeMs)){
             if (outEnabled) {
                 // Выход на порте PB0 включен
                 PORTB |= (1<<PB0);
@@ -279,12 +299,9 @@ int main(void) {
         }
         
         // Выключаем выход если настало время
-        if (millis && enabledEndTimeMs && (millis > enabledEndTimeMs)){
+        if (enabledEndTimeMs && (millis > enabledEndTimeMs)){
             // Выход на порте PB0 выключен
             PORTB &= ~(1<<PB0);
-
-            // Вырубаем счетчик миллисекунд
-            disableMillisTimer();
 
             // Обнуляем переменные диммера
             disabledEndTimeMs = 0;
