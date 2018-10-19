@@ -135,7 +135,7 @@ void disablePWMOut(){
         TCCR0B &= ~(1<<CS01);
         TCCR0B &= ~(1<<CS00);
         // Вырубаем режим быстрого шим (биты WGM01, WGM00)
-        TCCR0A &= ~(1<<WGM01)
+        TCCR0A &= ~(1<<WGM01);
         TCCR0A &= ~(1<<WGM00);
         // Вырубаем неинверсный режим (биты COM0A1, COM0A0) (может лучше инверсный?)
         TCCR0A &= ~(1<<COM0A1);
@@ -150,7 +150,7 @@ void setup(){
     wdt_disable();
 
     // Выставить порты в конкретное состояние InputPullup, чтобы по ним не происходили прерывания
-    initialSetupOutPorts()
+    initialSetupOutPorts();
 
     // Настраиваем регистры энергосбереженияэ
     setupPowerSaveRegisters();
