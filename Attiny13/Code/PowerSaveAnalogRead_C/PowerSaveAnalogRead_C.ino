@@ -175,8 +175,8 @@ void setup(){
     // Разрешаем обработку прерываний
     enableInterrupts();
 
-    // ЗАПУСКАЕМ таймер для ШИМ на ножке PB0
-    enablePWMOut();
+    // PWM отключен по дефолту
+    pwmEnabled = false;
 }
 
 void loop(){

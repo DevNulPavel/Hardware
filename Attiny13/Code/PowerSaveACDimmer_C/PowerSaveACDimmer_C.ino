@@ -136,7 +136,7 @@ void enableMillisTimer(){
     timerInterrupts = 0;
 }
 
-void disableMillisTimer(){
+/*void disableMillisTimer(){
     // Отключаем таймер
     TCCR0B &= ~(1<<CS02);
     TCCR0B &= ~(1<<CS01);
@@ -145,7 +145,7 @@ void disableMillisTimer(){
     TCNT0 = 0;
     // Обнуление времени
     timerInterrupts = 0;
-}
+}*/
 
 void setupACInterrupts(){
     // Настройка прерываний INT0 для детектирования нуля
