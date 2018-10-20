@@ -185,21 +185,27 @@ void loop(){
     // Инициализируем рассчет
     ADCSRA |= (1<<ADSC);
     
-    // Просто перекидываем процессор в сон, пробуждение по любому прерыванию
-    MCUCR |= (1<<SE);   // Включаем режим сна, sleep_enable();
-    asm("sleep"); // sleep_cpu();
-    
-    //while(ADCSRA & _BV(ADSC)); // Wait for conversion
+    // Просто перекидываем процессор в сон если нет результата, пробуждение по любому прерыванию
+    if(ADCSRA & (1<<ADSC) == 0){
+        MCUCR |= (1<<SE);   // Включаем режим сна, sleep_enable();
+        asm("sleep"); // sleep_cpu();    
+    }
 
     // Проверяем, что вычисление завершилось
     if(ADCSRA & (1<<ADSC)){
         // Вычитываем значение, которое мы получили при аналоговом чтении
         uint8_t l = ADCL;
         uint8_t h = ADCH;
-        unsigned int analogValue = (h << 8) | l;
+        uint16_t analogValue = (h << 8) | l;
 
+        /*uint32_t tempValue = analogValue;
+        tempValue *= 255;
+        tempValue /= 1024;
+        uint8_t digitalValue = static_cast<uint8_t>(tempValue);
+        */
+        
         // Выставляем выходное значение как шим
-        unsigned short digitalValue = static_cast<unsigned short>(analogValue*255/1024);
+        uint8_t digitalValue = static_cast<uint8_t>(analogValue >> 2);
         if (digitalValue == 0){
             // Вырубаем ШИМ
             disablePWMOut();
@@ -216,7 +222,7 @@ void loop(){
             // Ставим нужное значение ШИМ
             OCR0A = digitalValue; // Выставляем значение ШИМ в регистр
         }
-    } 
+    }
 }
 
 int main(void) {
