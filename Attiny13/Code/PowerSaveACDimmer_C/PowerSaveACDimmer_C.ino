@@ -8,10 +8,10 @@
 
 
 #define F_CPU 1200000UL  // Частота 1.2Mhz
-#include <avr/io.h>
+/*#include <avr/io.h>
 #include <avr/wdt.h>
 #include <util/delay.h>
-#include <avr/interrupt.h>
+#include <avr/interrupt.h>*/
 
 #ifndef CLEAR_BIT
     #define CLEAR_BIT(SRC, BIT) (_SFR_BYTE(SRC) &= ~_BV(BIT))
@@ -26,9 +26,9 @@
     #define BIT_IS_SET(SRC, BIT) (_SFR_BYTE(SRC) & _BV(BIT))
 #endif
 
+#define MS_TO_INTERRUPTS(MS) (MS*10)
+#define INTERRUPTS_TO_MS(INTERRUPTS) (INTERRUPTS/10)
 
-#define INTERRUPTS_OVERFLOW_TO_TICS(OVERFLOWS) (OVERFLOWS*8*256*F_CPU)
-#define MS_TO_TICS(MS) (MS*F_CPU/1000)
 
 const unsigned char MODES_POWERS_COUNT = 5;
 const char MODES_POWERS[] = {
@@ -63,8 +63,14 @@ ISR(PCINT0_vect) {
 }
 
 // Обработчик прерывания переполнения таймера
-ISR(TIM0_OVF_vect) {
-    // За одну миллисекунду у нас будет 150 прерываний
+/*ISR(TIM0_OVF_vect) {
+    timerInterrupts++;
+}*/
+
+// Обработчик прерывания по достижению таймером конкретного значения
+ISR(TIM0_COMPA_vect) {
+    // За одну миллисекунду у нас будет 10 прерываний
+    TCNT0 = 0; // Обнуляем счетчик, чтобы отсчет шел заново
     timerInterrupts++;
 }
 
@@ -104,17 +110,20 @@ void setupPowerSaveRegisters(){
 void setupMillisTimer(){
     // Настройка таймера
     // Включаем вызов прерывания у timer0 при переполнении
-    TIMSK0 |= (1<<TOIE0);
+    TIMSK0 &= ~(1<<TOIE0); // Прерывание по переполнению отключено
+    TIMSK0 |= (1<<OCIE0A);  // Вызовется прерывание по компаратору при достижении 120 компаратор A
+    TIMSK0 &= ~(1<<OCIE0B);  // Прерывание по компаратору B отключено
     
-    // Отключаем таймер
+    // Предделитель 1
+    // Each timer tick is 1/(1.2MHz/1) = 0.8333333333333333us
     TCCR0B &= ~(1<<CS02);
-    TCCR0B &= ~(1<<CS01);
-    TCCR0B &= ~(1<<CS00); 
+    TCCR0B &= (1<<CS01);
+    TCCR0B |= ~(1<<CS00); 
     
     // Настраиваем количество тиков при котором можно было бы настроить прерывание компаратора с обнулением счетчика внутри
-    // при делителе 8: 1/(1.2MHz/8) = 6.666us каждый тик, 150 тиков - 1ms
-    // TCCR0B |= (1<<FOC0A);  // Включаем сравнение с маской
-    // OCR0A = 149; // Маска совпадения значения (надо ли указывать 150-1 ???)
+    // при делителе 1: 1/(1.2MHz/1) = 0.8333333333333333us каждый тик, 1200 тиков - 1ms
+    TCCR0B |= (1<<FOC0A);  // Включаем сравнение с маской
+    OCR0A = 120; // Маска совпадения значения, 10 прерываний в 1ms
 
     // Обнуление счетчика
     TCNT0 = 0; // Начальное значение счётчика
@@ -123,12 +132,12 @@ void setupMillisTimer(){
     timerInterrupts = 0;
 }
 
-void enableMillisTimer(){
-    // Предделитель 1/8
-    // Each timer tick is 1/(1.2MHz/8) = 6.666us
+/*void enableMillisTimer(){
+    // Предделитель 1
+    // Each timer tick is 1/(1.2MHz/1) = 0.8333333333333333us
     TCCR0B &= ~(1<<CS02);
-    TCCR0B |= (1<<CS01);
-    TCCR0B &= ~(1<<CS00); 
+    TCCR0B &= (1<<CS01);
+    TCCR0B |= ~(1<<CS00); 
 
     // Обнуление счетчика
     TCNT0 = 0;
@@ -137,7 +146,7 @@ void enableMillisTimer(){
     timerInterrupts = 0;
 }
 
-/*void disableMillisTimer(){
+void disableMillisTimer(){
     // Отключаем таймер
     TCCR0B &= ~(1<<CS02);
     TCCR0B &= ~(1<<CS01);
@@ -208,9 +217,6 @@ void setup(){
 
     // Настройка счетчика времени
     setupMillisTimer();
-
-    // Запускаем таймер
-    enableMillisTimer();
 
     // Настройка прерываний детектирования нуля
     setupACInterrupts();
