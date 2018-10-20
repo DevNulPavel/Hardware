@@ -65,15 +65,6 @@ ISR(PCINT0_vect) {
 ISR(TIM0_OVF_vect) {
     // За одну миллисекунду у нас будет 150 прерываний
     timerInterrupts++;
-
-    // Сброс при переполнении каждый час
-    const unsigned long maxVal = MS_TO_INTERRUPTS(1000*60*60*1);
-    if (timerInterrupts > maxVal){
-        timerInterrupts = 0;
-        disabledEndTime = 0;
-        enabledEndTime = 0;
-        buttonCheckTime = 0;
-    }
 }
 
 // Выставить порты в конкретное состояние InputPullup, чтобы по ним не происходили прерывания
@@ -241,6 +232,18 @@ void setup(){
 }
 
 void loop(){
+    // Сброс при переполнении каждый час
+    const unsigned long maxVal = MS_TO_INTERRUPTS(1000*60*60*1);
+    if (timerInterrupts > maxVal){
+        timerInterrupts = 0;
+        disabledEndTime = 0;
+        enabledEndTime = 0;
+        buttonCheckTime = 0;
+
+        // Выход на порте PB0 выключен
+        PORTB &= ~(1<<PB0);
+    }
+    
     // Пока есть было прерывания - обрабатываем
     if(hasACInterrupt){
         const char powerACValue = MODES_POWERS[powerMode];
