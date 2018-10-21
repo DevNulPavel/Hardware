@@ -26,6 +26,7 @@
     #define BIT_IS_SET(SRC, BIT) (_SFR_BYTE(SRC) & _BV(BIT))
 #endif
 
+#define MICROSECONDS_PER_INTERRUPT (200)
 #define MS_TO_INTERRUPTS(MS) (MS*5)
 #define INTERRUPTS_TO_MS(INTERRUPTS) (INTERRUPTS/5)
 
@@ -53,7 +54,7 @@ unsigned char powerMode = 0;
 // Обработчик прерывания INT0, доступен на ноге PB1
 // Также по прерыванию происходит пробуждение микроконтроллера
 ISR(INT0_vect) {
-    //PORTB &= ~(1<<PB0); // Выход на порте PB0 сразу же должен быть выключен, раскомментить в случае проблем
+    //PORTB &= ~(1<<PB0); // Выход на порте PB0 сразу же должен быть выключен чтобы не активировать новую полуволну сразу, раскомментить в случае проблем
     hasACInterrupt = true;
 }
 
@@ -236,10 +237,14 @@ void loop(){
         const char powerACValue = MODES_POWERS[powerMode];
         const unsigned short zeroCrossPeriodTime = MS_TO_INTERRUPTS(1000/50/2); // Период между нулями - 10ms
         const unsigned short enabledDuration = powerACValue * zeroCrossPeriodTime / 100;
+        const unsigned short disabledDuration = zeroCrossPeriodTime - enabledDuration;
+        const unsigned short disableOutrun = 800/MICROSECONDS_PER_INTERRUPT; // На сколько микросекунд до конца полуволны закроется выход для следующего срабатывания
 
-        // Пропускать будем с середины полуволны и расширять ее
-        disabledEndTime = timerInterrupts + zeroCrossPeriodTime/2 - enabledDuration/2;
-        enabledEndTime = timerInterrupts + zeroCrossPeriodTime/2 + enabledDuration/2;
+        // Время, когда сигнал активен
+        disabledEndTime = timerInterrupts + disabledDuration;
+        // Деактивируем за 1 ms до конца полуволны
+        enabledEndTime = disabledEndTime + enabledDuration - disableOutrun;
+        enabledEndTime = max(enabledEndTime, disabledEndTime);
         
         hasACInterrupt = false;
     }
