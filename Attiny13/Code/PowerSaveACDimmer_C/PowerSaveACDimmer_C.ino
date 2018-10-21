@@ -7,7 +7,7 @@
 // http://www.customelectronics.ru/avr-apparatnyiy-shim-mikrokontrollera/
 
 
-#define F_CPU 1200000UL  // Частота 1.2Mhz
+#define F_CPU 9600000UL  // Частота 9.6Mhz
 /*#include <avr/io.h>
 #include <avr/wdt.h>
 #include <util/delay.h>
@@ -26,8 +26,8 @@
     #define BIT_IS_SET(SRC, BIT) (_SFR_BYTE(SRC) & _BV(BIT))
 #endif
 
-#define MS_TO_INTERRUPTS(MS) (MS*10)
-#define INTERRUPTS_TO_MS(INTERRUPTS) (INTERRUPTS/10)
+#define MS_TO_INTERRUPTS(MS) (MS*5)
+#define INTERRUPTS_TO_MS(INTERRUPTS) (INTERRUPTS/5)
 
 
 const unsigned char MODES_POWERS_COUNT = 5;
@@ -53,6 +53,7 @@ unsigned char powerMode = 0;
 // Обработчик прерывания INT0, доступен на ноге PB1
 // Также по прерыванию происходит пробуждение микроконтроллера
 ISR(INT0_vect) {
+    //PORTB &= ~(1<<PB0); // Выход на порте PB0 сразу же должен быть выключен, раскомментить в случае проблем
     hasACInterrupt = true;
 }
 
@@ -69,7 +70,7 @@ ISR(PCINT0_vect) {
 
 // Обработчик прерывания по достижению таймером конкретного значения
 ISR(TIM0_COMPA_vect) {
-    // За одну миллисекунду у нас будет 10 прерываний
+    // За одну миллисекунду у нас будет 5 прерываний
     TCNT0 = 0; // Обнуляем счетчик, чтобы отсчет шел заново
     timerInterrupts++;
 }
@@ -114,16 +115,16 @@ void setupMillisTimer(){
     TIMSK0 |= (1<<OCIE0A);  // Вызовется прерывание по компаратору при достижении 120 компаратор A
     TIMSK0 &= ~(1<<OCIE0B);  // Прерывание по компаратору B отключено
     
-    // Предделитель 1
-    // Each timer tick is 1/(1.2MHz/1) = 0.8333333333333333us
+    // Предделитель 8
+    // Each timer tick is 1/(9.6MHz/8) = 0.8333333333333333us
     TCCR0B &= ~(1<<CS02);
-    TCCR0B &= (1<<CS01);
-    TCCR0B |= ~(1<<CS00); 
+    TCCR0B |= (1<<CS01);
+    TCCR0B &= ~(1<<CS00); 
     
     // Настраиваем количество тиков при котором можно было бы настроить прерывание компаратора с обнулением счетчика внутри
-    // при делителе 1: 1/(1.2MHz/1) = 0.8333333333333333us каждый тик, 1200 тиков - 1ms
-    TCCR0B |= (1<<FOC0A);  // Включаем сравнение с маской
-    OCR0A = 120; // Маска совпадения значения, 10 прерываний в 1ms
+    // при делителе 1: 1/(9.6MHz/8) = 0.8333333333333333us каждый тик, 1200 тиков - 1ms
+    TCCR0B |= (1<<FOC0A);  // Включаем сравнение с маской (вроде бы работает и без этого)
+    OCR0A = 240; // Маска совпадения значения, 5 прерываний в 1ms (надо ли 240-1?)
 
     // Обнуление счетчика
     TCNT0 = 0; // Начальное значение счётчика
@@ -181,15 +182,6 @@ void setupSleepMode(){
     MCUCR |= (1<<SE);   // Включаем режим сна, sleep_enable();
 }
 
-/*bool isButtonPressedUpNoChatter(char port){
-    bool buttonPressed = ((PINB & (1 << port)) == 0); // Если низкий уровень - то кнопка нажата
-    if (buttonPressed){
-        _delay_ms(5); // Ждем чтобы избавиться от дребезга
-        buttonPressed = ((PINB & (1 << port)) == 0); // Если низкий уровень - то кнопка нажата
-    }
-    return buttonPressed;
-}*/
-
 void setup(){
     // Отключение WatchDog
     wdt_disable();
@@ -235,35 +227,43 @@ void setup(){
     disabledEndTime = 0;
     enabledEndTime = 0;
     buttonCheckTime = 0;
-    powerMode = 0;
+    powerMode = 4; // Чтобы старт был с нулевого уровня
 }
 
 void loop(){
-    // Сброс при переполнении каждый час
-    const unsigned long maxVal = MS_TO_INTERRUPTS(1000*60*60*1);
-    if (timerInterrupts > maxVal){
-        timerInterrupts = 0;
-        disabledEndTime = 0;
-        enabledEndTime = 0;
-        buttonCheckTime = 0;
-
-        // Выход на порте PB0 выключен
-        PORTB &= ~(1<<PB0);
-    }
-    
     // Пока есть было прерывания - обрабатываем
     if(hasACInterrupt){
         const char powerACValue = MODES_POWERS[powerMode];
-        const unsigned short zeroCrossPeriodTime = MS_TO_INTERRUPTS(1000/50/2);
+        const unsigned short zeroCrossPeriodTime = MS_TO_INTERRUPTS(1000/50/2); // Период между нулями - 10ms
         const unsigned short enabledDuration = powerACValue * zeroCrossPeriodTime / 100;
-
-        PORTB &= ~(1<<PB0); // Выход на порте PB0 выключен
 
         // Пропускать будем с середины полуволны и расширять ее
         disabledEndTime = timerInterrupts + zeroCrossPeriodTime/2 - enabledDuration/2;
         enabledEndTime = timerInterrupts + zeroCrossPeriodTime/2 + enabledDuration/2;
-
+        
         hasACInterrupt = false;
+    }
+
+    // Включаем выход если настало время
+    if (disabledEndTime && (timerInterrupts >= disabledEndTime)){
+        if (outEnabled) {
+            // Выход на порте PB0 включен
+            PORTB |= (1<<PB0);
+        }else{
+            // Выход на порте PB0 выключен
+            PORTB &= ~(1<<PB0);
+        }
+        // Обнуляем переменные диммера
+        disabledEndTime = 0;
+    }
+    
+    // Выключаем выход если настало время
+    if (enabledEndTime && (timerInterrupts >= enabledEndTime)){
+        // Выход на порте PB0 выключен
+        PORTB &= ~(1<<PB0);
+
+        // Обнуляем переменные диммера
+        enabledEndTime = 0;
     }
 
     // Если было прерывание кнопки - обрабатываем его
@@ -277,7 +277,7 @@ void loop(){
     }
 
     // Выполняем обработку антидребезга
-    if (buttonCheckTime && (timerInterrupts > buttonCheckTime)){
+    if (buttonCheckTime && (timerInterrupts >= buttonCheckTime)){
         bool buttonPressed = ((PINB & (1 << PB2)) == 0); // Если низкий уровень - то кнопка нажата
         if (buttonPressed){
             outEnabled = !outEnabled;
@@ -295,27 +295,18 @@ void loop(){
         buttonCheckTime = 0;
     }
 
-    // Включаем выход если настало время
-    if (disabledEndTime && (timerInterrupts > disabledEndTime)){
-        if (outEnabled) {
-            // Выход на порте PB0 включен
-            PORTB |= (1<<PB0);
-        }else{
-            // Выход на порте PB0 выключен
-            PORTB &= ~(1<<PB0);
-        }
-    }
-    
-    // Выключаем выход если настало время
-    if (enabledEndTime && (timerInterrupts > enabledEndTime)){
-        // Выход на порте PB0 выключен
-        PORTB &= ~(1<<PB0);
-
-        // Обнуляем переменные диммера
+    // Сброс при переполнении каждый час
+    const unsigned long maxVal = MS_TO_INTERRUPTS(1000*60*60*1);
+    if (timerInterrupts > maxVal){
+        timerInterrupts = 0;
         disabledEndTime = 0;
         enabledEndTime = 0;
-    }
+        buttonCheckTime = 0;
 
+        // Выход на порте PB0 выключен
+        PORTB &= ~(1<<PB0);
+    }
+    
     // Проверяем, не было ли новых прерываний в процессе работы итерации цикла
     if(!hasACInterrupt && !hasKeyInterrupt){
         // Просто перекидываем процессор в сон, пробуждение по любому прерыванию
