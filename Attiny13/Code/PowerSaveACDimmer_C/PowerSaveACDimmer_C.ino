@@ -9,9 +9,9 @@
 
 #define F_CPU 9600000UL  // Частота 9.6Mhz
 /*#include <avr/io.h>
-#include <avr/wdt.h>
 #include <util/delay.h>
 #include <avr/interrupt.h>*/
+#include <avr/wdt.h>
 #include <avr/eeprom.h>
 
 
@@ -32,15 +32,10 @@
 #define MS_TO_INTERRUPTS(MS) (MS*5)
 #define INTERRUPTS_TO_MS(INTERRUPTS) (INTERRUPTS/5)
 
-
+const unsigned char blinkONDuration = 500;
+const unsigned char blinkOFFDuration = 750;
 const unsigned char MODES_POWERS_COUNT = 5;
-const char MODES_POWERS[] = {
-    20, // Процентов
-    40, // Процентов
-    60, // Процентов
-    80, // Процентов
-    100 // Процентов
-};
+const unsigned char STEP_VALUE = 20;
 
 volatile bool hasACInterrupt = false;
 volatile bool hasKeyInterrupt = false;
@@ -50,6 +45,9 @@ unsigned int disabledEndTime = 0;
 unsigned int enabledEndTime = 0;
 unsigned int buttonCheckTime = 0;
 unsigned char powerMode = 0;
+unsigned char blinksLeft = 0;
+unsigned int blinkStartTime = 0;
+unsigned int blinkEndTime = 0;
 
 
 // Обработчик прерывания INT0, доступен на ноге PB1
@@ -77,13 +75,6 @@ ISR(TIM0_COMPA_vect) {
     timerInterrupts++;
 }
 
-void watchdogOff(void) {
-    __watchdog_reset();
-    MCUSR &= ~(1<<WDRF);
-    WDTCR |= (1<<WDCE) | (1<<WDE);
-    WDTCR = 0x00;
-}
-
 // Выставить порты в конкретное состояние InputPullup, чтобы по ним не происходили прерывания
 void initialSetupOutPorts(){
     // Пин выхода PB0
@@ -98,21 +89,22 @@ void initialSetupOutPorts(){
     DDRB &= ~(1<<PB2); // Настраиваем кнопку на порте PB2 как вход
     PORTB |= (1<<PB2); // Делаем кнопку на порте PB2 подтянутой к ВЫСОКОМУ уровню, подключать к земле
 
+    // Пин выхода PB3
+    DDRB |= (1<<PB0); // Настраиваем выход PB0 как выход
+    PORTB &= ~(1<<PB0); // Выход на порте PB0 выключен
+    
     // Настраиваем остальные порты для энергосбережения
-    DDRB &= ~(1<<PB3); // Настраиваем кнопку на порте как вход
-    PORTB |= (1<<PB3); // Делаем кнопку на порте подтянутой к ВЫСОКОМУ уровню, подключать к земле
-
     DDRB &= ~(1<<PB4); // Настраиваем кнопку на порте как вход
     PORTB |= (1<<PB4); // Делаем кнопку на порте подтянутой к ВЫСОКОМУ уровню, подключать к земле
 }
 
 void setupPowerSaveRegisters(){
     // В регистр энергосбережения записываем PRTIM0 (отключение счетчика) и PRADC (отключение ADC преобразователя)
-    //PRR = (1<<PRTIM0) | (1<<PRADC);
+    //PRR |= (1<<PRTIM0) | (1<<PRADC);
 
     // В регистр энергосбережения PRADC (отключение только ADC преобразователя)
-    PRR = (1<<PRADC);
-    PRR &= ~(1<<PRTIM0);
+    PRR |= (1<<PRADC);
+    //PRR &= ~(1<<PRTIM0);
 
     // Отключение AЦП
     ADCSRA &= ~(1 << ADEN);
@@ -124,20 +116,20 @@ void setupPowerSaveRegisters(){
 void setupMillisTimer(){
     // Настройка таймера
     // Включаем вызов прерывания у timer0 при переполнении
-    TIMSK0 &= ~(1<<TOIE0); // Прерывание по переполнению отключено
+    //TIMSK0 &= ~((1<<TOIE0); // Прерывание по переполнению отключено
     TIMSK0 |= (1<<OCIE0A);  // Вызовется прерывание по компаратору при достижении 120 компаратор A
-    TIMSK0 &= ~(1<<OCIE0B);  // Прерывание по компаратору B отключено
+    //TIMSK0 &= ~(1<<OCIE0B);  // Прерывание по компаратору B отключено
     
     // Настраиваем, чтобы при достижении конкретного значения в OCR0A таймер сбросился сам, и не надо было бы в прерывании вручную обнулять счетчик
-    TCCR0B &= (1<<WGM02);
+    //TCCR0B &= ~(1<<WGM02);
     TCCR0A |= (1<<WGM01);
-    TCCR0A &= (1<<WGM00);
+    //TCCR0A &= ~(1<<WGM00);
 
     // Предделитель 8
     // Each timer tick is 1/(9.6MHz/8) = 0.8333333333333333us
-    TCCR0B &= ~(1<<CS02);
+    //TCCR0B &= ~(1<<CS02);
     TCCR0B |= (1<<CS01);
-    TCCR0B &= ~(1<<CS00); 
+    //TCCR0B &= ~(1<<CS00); 
     
     // Настраиваем количество тиков при котором можно было бы настроить прерывание компаратора с обнулением счетчика внутри
     // при делителе 1: 1/(9.6MHz/8) = 0.8333333333333333us каждый тик, 1200 тиков - 1ms
@@ -146,9 +138,6 @@ void setupMillisTimer(){
 
     // Обнуление счетчика
     TCNT0 = 0; // Начальное значение счётчика
-
-    // Обнуление времени
-    timerInterrupts = 0;
 }
 
 /*void enableMillisTimer(){
@@ -180,7 +169,7 @@ void setupACInterrupts(){
     // Настройка прерываний INT0 для детектирования нуля
     GIMSK |= (1<<INT0); // Разрешаем внешние прерывания на INT0
     MCUCR |= (1<<ISC01);  // Прерывания будут при падении уровня, поддерживается только у прерывания INT0, не у PCINT (ISC01, ISC00 биты для настроек)
-    MCUCR &= ~(1<<ISC00); // Прерывания будут при падении уровня, поддерживается только у прерывания INT0, не у PCINT (ISC01, ISC00 биты для настроек)
+    //MCUCR &= ~(1<<ISC00); // Прерывания будут при падении уровня, поддерживается только у прерывания INT0, не у PCINT (ISC01, ISC00 биты для настроек)
 }
 
 void setupButtonInterrupts(){
@@ -212,9 +201,12 @@ void setup(){
     enabledEndTime = 0;
     buttonCheckTime = 0;
     powerMode = (lastSavedMode % MODES_POWERS_COUNT); // Чтобы запустился предыдущий уровень
-
+    blinksLeft = 0;
+    blinkStartTime = 0;
+    blinkEndTime = 0;
+    
     // Отключение WatchDog
-    watchdogOff(); // wdt_disable(); - функция из библиотеки
+    wdt_disable();
 
     // Выставить порты в конкретное состояние InputPullup, чтобы по ним не происходили прерывания
     initialSetupOutPorts();
@@ -241,7 +233,7 @@ void setup(){
 void loop(){
     // Пока есть было прерывания - обрабатываем
     if(hasACInterrupt){
-        const char powerACValue = MODES_POWERS[powerMode];
+        const char powerACValue = STEP_VALUE*powerMode+STEP_VALUE;
         const unsigned short zeroCrossPeriodTime = MS_TO_INTERRUPTS(1000/50/2); // Период между нулями - 10ms
         const unsigned short enabledDuration = powerACValue * zeroCrossPeriodTime / 100;
         const unsigned short disabledDuration = zeroCrossPeriodTime - enabledDuration;
@@ -275,7 +267,7 @@ void loop(){
     // Если было прерывание кнопки - обрабатываем его
     if (hasKeyInterrupt){
         // Если низкий уровень - то кнопка нажата
-        bool buttonPressed = ((PINB & (1 << PB2)) == 0);
+        const bool buttonPressed = ((PINB & (1 << PB2)) == 0);
         if (buttonPressed){
             buttonCheckTime = timerInterrupts + MS_TO_INTERRUPTS(5); //  Окончательную проверку дребезга сделаем через 5 миллисекунд
         }
@@ -290,12 +282,40 @@ void loop(){
             powerMode = (powerMode + 1) % MODES_POWERS_COUNT;
 
             // Сохраняем режим
-            eeprom_write_byte((uint8_t*)0, powerMode); 
+            // TODO: Долгая операция? Перенести в цикл очередного запуска полуволны?
+            eeprom_write_byte((uint8_t*)0, powerMode);
+
+            // Планируем следующий блинк
+            blinksLeft = powerMode+1;
+            blinkStartTime = timerInterrupts + MS_TO_INTERRUPTS(blinkONDuration);
+            blinkEndTime = blinkStartTime + MS_TO_INTERRUPTS(blinkOFFDuration);
         }
 
         buttonCheckTime = 0;
     }
 
+    // Запуск свечения светодиода
+    if (blinkStartTime && (timerInterrupts >= blinkStartTime)){
+        // Выход на порте PB3 включен
+        PORTB |= (1<<PB3);
+        // Обнуляем переменнeю времени
+        blinkStartTime = 0;
+    }
+    
+    // Выключаем выход если настало время
+    if (blinkEndTime && (timerInterrupts >= blinkEndTime)){
+        // Выход на порте PB3 выключен
+        PORTB &= ~(1<<PB3);
+        // Обнуляем переменные диммера
+        blinkEndTime = 0;
+        // Планируем следующий блинк
+        blinksLeft--;
+        if(blinksLeft > 0){
+            blinkStartTime = timerInterrupts + MS_TO_INTERRUPTS(blinkONDuration);
+            blinkEndTime = blinkStartTime + MS_TO_INTERRUPTS(blinkOFFDuration);
+        }
+    }
+    
     // Сброс при переполнении каждый час
     const unsigned long maxVal = MS_TO_INTERRUPTS(1000*60*60*1);
     if (timerInterrupts > maxVal){
@@ -303,9 +323,13 @@ void loop(){
         disabledEndTime = 0;
         enabledEndTime = 0;
         buttonCheckTime = 0;
-
+        blinksLeft = 0;
+        blinkStartTime = 0;
+        blinkEndTime = 0;
+        
         // Выход на порте PB0 выключен
         PORTB &= ~(1<<PB0);
+        PORTB &= ~(1<<PB3);
     }
     
     // Проверяем, не было ли новых прерываний в процессе работы итерации цикла
