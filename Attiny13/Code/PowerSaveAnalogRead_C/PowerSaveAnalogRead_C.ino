@@ -37,6 +37,13 @@ ISR(ADC_vect) {
     //while(ADCSRA & _BV(ADSC)); // Wait for conversion
 }
 
+void watchdogOff(void) {
+    __watchdog_reset();
+    MCUSR &= ~(1<<WDRF);
+    WDTCR |= (1<<WDCE) | (1<<WDE);
+    WDTCR = 0x00;
+}
+
 // Выставить порты в конкретное состояние InputPullup, чтобы по ним не происходили прерывания
 void initialSetupOutPorts(){
     DDRB &= ~(1<<PB0); // Настраиваем кнопку на порте как вход
@@ -149,7 +156,7 @@ void disablePWMOut(){
 
 void setup(){
     // Отключение WatchDog
-    wdt_disable();
+    watchdogOff(); // wdt_disable(); - функция из библиотеки
 
     // Выставить порты в конкретное состояние InputPullup, чтобы по ним не происходили прерывания
     initialSetupOutPorts();
