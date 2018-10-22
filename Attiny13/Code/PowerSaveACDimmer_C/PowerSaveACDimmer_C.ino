@@ -12,6 +12,8 @@
 #include <avr/wdt.h>
 #include <util/delay.h>
 #include <avr/interrupt.h>*/
+#include <avr/eeprom.h>
+
 
 #ifndef CLEAR_BIT
     #define CLEAR_BIT(SRC, BIT) (_SFR_BYTE(SRC) &= ~_BV(BIT))
@@ -44,7 +46,6 @@ volatile bool hasACInterrupt = false;
 volatile bool hasKeyInterrupt = false;
 volatile unsigned int timerInterrupts = 0;
 
-bool outEnabled = false;
 unsigned int disabledEndTime = 0;
 unsigned int enabledEndTime = 0;
 unsigned int buttonCheckTime = 0;
@@ -85,15 +86,19 @@ void watchdogOff(void) {
 
 // Выставить порты в конкретное состояние InputPullup, чтобы по ним не происходили прерывания
 void initialSetupOutPorts(){
-    //DDRB &= ~(1<<PB0); // Настраиваем кнопку на порте как вход
-    //PORTB |= (1<<PB0); // Делаем кнопку на порте подтянутой к ВЫСОКОМУ уровню, подключать к земле
+    // Пин выхода PB0
+    DDRB |= (1<<PB0); // Настраиваем выход PB0 как выход
+    PORTB &= ~(1<<PB0); // Выход на порте PB0 выключен
 
-    //DDRB &= ~(1<<PB1); // Настраиваем кнопку на порте как вход
-    //PORTB |= (1<<PB1); // Делаем кнопку на порте подтянутой к ВЫСОКОМУ уровню, подключать к земле
+    // Пин детектора нуля PB1
+    DDRB &= ~(1<<PB1); // Настраиваем детектор нуля на порте PB1 как вход
+    PORTB |= (1<<PB1); // Делаем кнопку на порте PB1 подтянутой к ВЫСОКОМУ уровню, подключать к земле
 
-    //DDRB &= ~(1<<PB2); // Настраиваем кнопку на порте как вход
-    //PORTB |= (1<<PB2); // Делаем кнопку на порте подтянутой к ВЫСОКОМУ уровню, подключать к земле
+    // Пины кнопки на порте PB2
+    DDRB &= ~(1<<PB2); // Настраиваем кнопку на порте PB2 как вход
+    PORTB |= (1<<PB2); // Делаем кнопку на порте PB2 подтянутой к ВЫСОКОМУ уровню, подключать к земле
 
+    // Настраиваем остальные порты для энергосбережения
     DDRB &= ~(1<<PB3); // Настраиваем кнопку на порте как вход
     PORTB |= (1<<PB3); // Делаем кнопку на порте подтянутой к ВЫСОКОМУ уровню, подключать к земле
 
@@ -196,6 +201,18 @@ void setupSleepMode(){
 }
 
 void setup(){
+    // Прочитаем последний сохраненный режим
+    const uint8_t lastSavedMode = eeprom_read_byte((uint8_t*)0);
+
+    // Обнуление переменных
+    hasACInterrupt = false;
+    hasKeyInterrupt = false;
+    timerInterrupts = 0;
+    disabledEndTime = 0;
+    enabledEndTime = 0;
+    buttonCheckTime = 0;
+    powerMode = (lastSavedMode % MODES_POWERS_COUNT); // Чтобы запустился предыдущий уровень
+
     // Отключение WatchDog
     watchdogOff(); // wdt_disable(); - функция из библиотеки
 
@@ -204,18 +221,6 @@ void setup(){
 
     // Настраиваем регистры энергосбереженияэ
     setupPowerSaveRegisters();
-
-    // Пин выхода PB0
-    DDRB |= (1<<PB0); // Настраиваем выход PB0 как выход
-    PORTB &= ~(1<<PB0); // Выход на порте PB0 выключен
-
-    // Пин детектора нуля PB1
-    DDRB &= ~(1<<PB1); // Настраиваем детектор нуля на порте PB1 как вход
-    PORTB |= (1<<PB1); // Делаем кнопку на порте PB1 подтянутой к ВЫСОКОМУ уровню, подключать к земле
-
-    // Пины кнопки на порте PB2
-    DDRB &= ~(1<<PB2); // Настраиваем кнопку на порте PB2 как вход
-    PORTB |= (1<<PB2); // Делаем кнопку на порте PB2 подтянутой к ВЫСОКОМУ уровню, подключать к земле
 
     // Настраиваем режим сна, пробуждение будет по внешним прерываниям и таймерам
     setupSleepMode();
@@ -231,16 +236,6 @@ void setup(){
 
     // Разрешаем обработку прерываний
     enableInterrupts();
-
-    // Обнуление переменных
-    hasACInterrupt = false;
-    hasKeyInterrupt = false;
-    timerInterrupts = 0;
-    outEnabled = false;
-    disabledEndTime = 0;
-    enabledEndTime = 0;
-    buttonCheckTime = 0;
-    powerMode = 4; // Чтобы старт был с нулевого уровня
 }
 
 void loop(){
@@ -263,13 +258,8 @@ void loop(){
 
     // Включаем выход если настало время
     if (disabledEndTime && (timerInterrupts >= disabledEndTime)){
-        if (outEnabled) {
-            // Выход на порте PB0 включен
-            PORTB |= (1<<PB0);
-        }else{
-            // Выход на порте PB0 выключен
-            PORTB &= ~(1<<PB0);
-        }
+        // Выход на порте PB0 включен
+        PORTB |= (1<<PB0);
         // Обнуляем переменные диммера
         disabledEndTime = 0;
     }
@@ -278,7 +268,6 @@ void loop(){
     if (enabledEndTime && (timerInterrupts >= enabledEndTime)){
         // Выход на порте PB0 выключен
         PORTB &= ~(1<<PB0);
-
         // Обнуляем переменные диммера
         enabledEndTime = 0;
     }
@@ -297,16 +286,11 @@ void loop(){
     if (buttonCheckTime && (timerInterrupts >= buttonCheckTime)){
         bool buttonPressed = ((PINB & (1 << PB2)) == 0); // Если низкий уровень - то кнопка нажата
         if (buttonPressed){
-            outEnabled = !outEnabled;
+            // Выбираем новый режим
+            powerMode = (powerMode + 1) % MODES_POWERS_COUNT;
 
-            // Принудительно отключаем таймер для диммера
-            if (outEnabled) {
-                // Выбираем новый режим
-                powerMode = (powerMode + 1) % MODES_POWERS_COUNT;
-            }else{
-                // Выход на порте PB0 выключен
-                PORTB &= ~(1<<PB0);
-            }
+            // Сохраняем режим
+            eeprom_write_byte((uint8_t*)0, powerMode); 
         }
 
         buttonCheckTime = 0;
