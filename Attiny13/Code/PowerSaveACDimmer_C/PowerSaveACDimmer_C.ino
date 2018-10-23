@@ -10,9 +10,9 @@
 #define F_CPU 9600000UL  // Частота 9.6Mhz
 /*#include <avr/io.h>
 #include <util/delay.h>
-#include <avr/interrupt.h>*/
+#include <avr/interrupt.h>
 #include <avr/wdt.h>
-#include <avr/eeprom.h>
+#include <avr/eeprom.h>*/
 
 
 #ifndef CLEAR_BIT
@@ -32,8 +32,8 @@
 #define MS_TO_INTERRUPTS(MS) (MS*5)
 #define INTERRUPTS_TO_MS(INTERRUPTS) (INTERRUPTS/5)
 
-const unsigned char blinkONDuration = 500;
-const unsigned char blinkOFFDuration = 750;
+const unsigned short blinkONDuration = 500;
+const unsigned short blinkOFFDuration = 750;
 const unsigned char MODES_POWERS_COUNT = 5;
 const unsigned char STEP_VALUE = 20;
 
@@ -307,7 +307,7 @@ void loop(){
 
     // Выполняем обработку антидребезга
     if (buttonCheckTime && (timerInterrupts >= buttonCheckTime)){
-        bool buttonPressed = ((PINB & (1 << PB2)) == 0); // Если низкий уровень - то кнопка нажата
+        const bool buttonPressed = ((PINB & (1 << PB2)) == 0); // Если низкий уровень - то кнопка нажата
         if (buttonPressed){
             // Выбираем новый режим
             powerMode = (powerMode + 1) % MODES_POWERS_COUNT;
