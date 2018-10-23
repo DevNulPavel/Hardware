@@ -189,9 +189,40 @@ void setupSleepMode(){
     MCUCR |= (1<<SE);   // Включаем режим сна, sleep_enable();
 }
 
+// Запись в постоянную память из документации
+void EEPROM_write(unsigned char ucAddress, unsigned char ucData) {
+    // Ожидаем завершения предыдущей записи
+    while(EECR & (1<<EEPE));
+    // Выставляем режим записи (Можно и режим записи и чтения атомарного)
+    EECR |= (1<<EEPM1);
+    EECR &= ~(1<<EEPM0);
+    // Записываем адреса и данные в регистры
+    EEARL = ucAddress;
+    EEDR = ucData;
+    // разрешаем запись
+    EECR |= (1<<EEMPE);
+    // Запускаем запись
+    EECR |= (1<<EEPE);
+}
+
+// Чтение из постоянной памяти, код из документации
+unsigned char EEPROM_read(unsigned char ucAddress) {
+    // Ожидаем завершения предыдущей записи
+    // while(EECR & (1<<EEPE)); // Чтение происходит один раз - не нужно проверять
+    // Выставляем режим чтения (Можно и режим записи и чтения атомарного)
+    EECR &= ~(1<<EEPM1);
+    EECR |= (1<<EEPM0);
+    // Выставляем регистр адреса
+    EEARL = ucAddress;
+    // Запускаем операцию чтения
+    EECR |= (1<<EERE);
+    // Возвращаем прочитанные данные
+    return EEDR;
+}
+
 void setup(){
     // Прочитаем последний сохраненный режим
-    const uint8_t lastSavedMode = eeprom_read_byte((uint8_t*)0);
+    const uint8_t lastSavedMode = EEPROM_read(0); // eeprom_read_byte((uint8_t*)0);
 
     // Обнуление переменных
     hasACInterrupt = false;
@@ -283,7 +314,7 @@ void loop(){
 
             // Сохраняем режим
             // TODO: Долгая операция? Перенести в цикл очередного запуска полуволны?
-            eeprom_write_byte((uint8_t*)0, powerMode);
+            EEPROM_write(0, powerMode); //eeprom_write_byte((uint8_t*)0, powerMode);
 
             // Планируем следующий блинк
             blinksLeft = powerMode+1;
