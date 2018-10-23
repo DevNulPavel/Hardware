@@ -44,10 +44,10 @@ volatile unsigned int timerInterrupts = 0;
 unsigned int disabledEndTime = 0;
 unsigned int enabledEndTime = 0;
 unsigned int buttonCheckTime = 0;
-unsigned char powerMode = 0;
-unsigned char blinksLeft = 0;
 unsigned int blinkStartTime = 0;
 unsigned int blinkEndTime = 0;
+unsigned char blinksLeft = 0;
+unsigned char powerMode = 0;
 
 
 // Обработчик прерывания INT0, доступен на ноге PB1
@@ -220,22 +220,25 @@ unsigned char EEPROM_read(unsigned char ucAddress) {
     return EEDR;
 }
 
-void setup(){
-    // Прочитаем последний сохраненный режим
-    const uint8_t lastSavedMode = EEPROM_read(0); // eeprom_read_byte((uint8_t*)0);
-
-    // Обнуление переменных
-    hasACInterrupt = false;
-    hasKeyInterrupt = false;
+void clearTimedValues(){
     timerInterrupts = 0;
     disabledEndTime = 0;
     enabledEndTime = 0;
     buttonCheckTime = 0;
-    powerMode = (lastSavedMode % MODES_POWERS_COUNT); // Чтобы запустился предыдущий уровень
-    blinksLeft = 0;
     blinkStartTime = 0;
     blinkEndTime = 0;
-    
+    blinksLeft = 0;
+}
+
+void setup(){
+    // Обнуление переменных
+    hasACInterrupt = false;
+    hasKeyInterrupt = false;
+    clearTimedValues();
+
+    // Прочитаем последний сохраненный режим
+    powerMode = (EEPROM_read(0) % MODES_POWERS_COUNT); // Чтобы запустился предыдущий уровень, eeprom_read_byte((uint8_t*)0);
+
     // Отключение WatchDog
     wdt_disable();
 
@@ -347,22 +350,23 @@ void loop(){
         }
     }
     
-    // Сброс при переполнении каждый час
-    const unsigned long maxVal = MS_TO_INTERRUPTS(1000*60*60*1);
+    // Сброс против переполнений каждые 5 минут
+    const unsigned long maxVal = MS_TO_INTERRUPTS(1000*60*5);
     if (timerInterrupts > maxVal){
-        timerInterrupts = 0;
-        disabledEndTime = 0;
-        enabledEndTime = 0;
-        buttonCheckTime = 0;
-        blinksLeft = 0;
-        blinkStartTime = 0;
-        blinkEndTime = 0;
+        clearTimedValues();
         
         // Выход на порте PB0 выключен
         PORTB &= ~(1<<PB0);
+        // Выход на порте PB3 выключен
         PORTB &= ~(1<<PB3);
     }
     
+    // Если ничего не запланировано - сбрасываем значения, чтобы не словить переполнение
+    // Позволяет использовать short переменные для отсчета времени вместо int, short типа хватает на 55 минут, поэтому однозначно сбросится
+    /*if (!disabledEndTime && !enabledEndTime && !buttonCheckTime && !blinkStartTime && !blinkEndTime){
+        timerInterrupts = 0;
+    }*/
+
     // Проверяем, не было ли новых прерываний в процессе работы итерации цикла
     if(!hasACInterrupt && !hasKeyInterrupt){
         // Просто перекидываем процессор в сон, пробуждение по любому прерыванию
