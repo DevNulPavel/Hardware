@@ -32,8 +32,8 @@
 #define MS_TO_INTERRUPTS(MS) (MS*5)
 #define INTERRUPTS_TO_MS(INTERRUPTS) (INTERRUPTS/5)
 
-const unsigned short blinkONDuration = 500;
-const unsigned short blinkOFFDuration = 750;
+const unsigned short blinkONDuration = 150;
+const unsigned short blinkOFFDuration = 150;
 const unsigned char MODES_POWERS_COUNT = 5;
 const unsigned char STEP_VALUE = 20;
 
