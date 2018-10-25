@@ -11,8 +11,8 @@
 /*#include <avr/io.h>
 #include <util/delay.h>
 #include <avr/interrupt.h>
-#include <avr/wdt.h>
-#include <avr/eeprom.h>*/
+#include <avr/wdt.h>*/
+#include <avr/eeprom.h>
 
 
 #ifndef CLEAR_BIT
@@ -46,8 +46,8 @@ unsigned int enabledEndTime = 0;
 unsigned int buttonCheckTime = 0;
 unsigned int blinkStartTime = 0;
 unsigned int blinkEndTime = 0;
-unsigned char blinksLeft = 0;
 unsigned char powerMode = 0;
+unsigned char blinksLeft = 0;
 bool buttonInProcess = false;
 
 
@@ -91,8 +91,8 @@ void initialSetupOutPorts(){
     PORTB |= (1<<PB2); // Делаем кнопку на порте PB2 подтянутой к ВЫСОКОМУ уровню, подключать к земле
 
     // Пин выхода PB3
-    DDRB |= (1<<PB0); // Настраиваем выход PB0 как выход
-    PORTB &= ~(1<<PB0); // Выход на порте PB0 выключен
+    DDRB |= (1<<PB3); // Настраиваем выход PB0 как выход
+    PORTB &= ~(1<<PB3); // Выход на порте PB0 выключен
     
     // Настраиваем остальные порты для энергосбережения
     DDRB &= ~(1<<PB4); // Настраиваем кнопку на порте как вход
@@ -118,7 +118,7 @@ void setupMillisTimer(){
     // Настройка таймера
     // Включаем вызов прерывания у timer0 при переполнении
     //TIMSK0 &= ~((1<<TOIE0); // Прерывание по переполнению отключено
-    TIMSK0 |= (1<<OCIE0A);  // Вызовется прерывание по компаратору при достижении 120 компаратор A
+    TIMSK0 |= (1<<OCIE0A);  // Вызовется прерывание по компаратору при достижении 240 компаратор A
     //TIMSK0 &= ~(1<<OCIE0B);  // Прерывание по компаратору B отключено
     
     // Настраиваем, чтобы при достижении конкретного значения в OCR0A таймер сбросился сам, и не надо было бы в прерывании вручную обнулять счетчик
@@ -187,16 +187,16 @@ void setupSleepMode(){
     // Настройки режима сна, режим SLEEP_MODE_IDLE, чтобы работали таймеры?
     MCUCR &= ~(1<<SM1); // Включаем idle mode, set_sleep_mode (SLEEP_MODE_IDLE);
     MCUCR &= ~(1<<SM0); // Включаем idle mode, set_sleep_mode (SLEEP_MODE_IDLE);
-    MCUCR |= (1<<SE);   // Включаем режим сна, sleep_enable();
 }
 
+/*
 // Запись в постоянную память из документации
 void EEPROM_write(unsigned char ucAddress, unsigned char ucData) {
     // Ожидаем завершения предыдущей записи
     while(EECR & (1<<EEPE));
-    // Выставляем режим записи (Можно и режим записи и чтения атомарного)
+    // Выставляем режим записи и чтения атомарного
     EECR |= (1<<EEPM1);
-    EECR &= ~(1<<EEPM0);
+    EECR |= (1<<EEPM0);
     // Записываем адреса и данные в регистры
     EEARL = ucAddress;
     EEDR = ucData;
@@ -209,9 +209,9 @@ void EEPROM_write(unsigned char ucAddress, unsigned char ucData) {
 // Чтение из постоянной памяти, код из документации
 unsigned char EEPROM_read(unsigned char ucAddress) {
     // Ожидаем завершения предыдущей записи
-    // while(EECR & (1<<EEPE)); // Чтение происходит один раз - не нужно проверять
-    // Выставляем режим чтения (Можно и режим записи и чтения атомарного)
-    EECR &= ~(1<<EEPM1);
+    while(EECR & (1<<EEPE)); // Чтение происходит один раз - не нужно проверять
+    // Выставляем режим записи и чтения атомарного
+    EECR |= (1<<EEPM1);
     EECR |= (1<<EEPM0);
     // Выставляем регистр адреса
     EEARL = ucAddress;
@@ -219,10 +219,14 @@ unsigned char EEPROM_read(unsigned char ucAddress) {
     EECR |= (1<<EERE);
     // Возвращаем прочитанные данные
     return EEDR;
-}
+}*/
 
 void clearTimedValues(){
-    timerInterrupts = 0;
+    uint8_t oldSREG = SREG; // Preserve old SREG value 
+    cli();                  // Disable global interrupts
+    timerInterrupts = 0;    // Store timer0 overflow count
+    SREG = oldSREG;         // Restore SREG
+    
     disabledEndTime = 0;
     enabledEndTime = 0;
     buttonCheckTime = 0;
@@ -239,7 +243,7 @@ void setup(){
     clearTimedValues();
 
     // Прочитаем последний сохраненный режим
-    powerMode = (EEPROM_read(0) % MODES_POWERS_COUNT); // Чтобы запустился предыдущий уровень, eeprom_read_byte((uint8_t*)0);
+    powerMode = (eeprom_read_byte((uint8_t*)0) % MODES_POWERS_COUNT);//(EEPROM_read(0) % MODES_POWERS_COUNT); // Чтобы запустился предыдущий уровень, eeprom_read_byte((uint8_t*)0);
 
     // Отключение WatchDog
     wdt_disable();
@@ -267,6 +271,11 @@ void setup(){
 }
 
 void loop(){
+    uint8_t oldSREG = SREG; // Preserve old SREG value 
+    cli();                  // Disable global interrupts
+    const unsigned int now = timerInterrupts;    // Store timer0 overflow count
+    SREG = oldSREG;         // Restore SREG
+    
     // Пока есть было прерывания - обрабатываем
     if(hasACInterrupt){
         const char powerACValue = STEP_VALUE*powerMode+STEP_VALUE;
@@ -276,7 +285,7 @@ void loop(){
         const unsigned short disableOutrun = 800/MICROSECONDS_PER_INTERRUPT; // На сколько микросекунд до конца полуволны закроется выход для следующего срабатывания
 
         // Время, когда сигнал активен
-        disabledEndTime = timerInterrupts + disabledDuration;
+        disabledEndTime = now + disabledDuration;
         // Деактивируем за 1 ms до конца полуволны
         enabledEndTime = disabledEndTime + enabledDuration - disableOutrun;
         enabledEndTime = max(enabledEndTime, disabledEndTime);
@@ -285,7 +294,7 @@ void loop(){
     }
 
     // Включаем выход если настало время
-    if (disabledEndTime && (timerInterrupts >= disabledEndTime)){
+    if ((disabledEndTime > 0) && (now >= disabledEndTime)){
         // Выход на порте PB0 включен
         PORTB |= (1<<PB0);
         // Обнуляем переменные диммера
@@ -293,7 +302,7 @@ void loop(){
     }
     
     // Выключаем выход если настало время
-    if (enabledEndTime && (timerInterrupts >= enabledEndTime)){
+    if ((enabledEndTime > 0) && (now >= enabledEndTime)){
         // Выход на порте PB0 выключен
         PORTB &= ~(1<<PB0);
         // Обнуляем переменные диммера
@@ -306,7 +315,7 @@ void loop(){
         if(buttonInProcess == false){
             const bool buttonPressed = ((PINB & (1 << PB2)) == 0);
             if (buttonPressed){
-                buttonCheckTime = timerInterrupts + MS_TO_INTERRUPTS(25); //  Окончательную проверку дребезга сделаем через 25 миллисекунд
+                buttonCheckTime = now + MS_TO_INTERRUPTS(25); //  Окончательную проверку дребезга сделаем через 25 миллисекунд
                 buttonInProcess = true;
             }
         }
@@ -314,7 +323,7 @@ void loop(){
     }
 
     // Выполняем обработку антидребезга
-    if (buttonCheckTime && (timerInterrupts >= buttonCheckTime)){
+    if ((buttonCheckTime > 0) && (now >= buttonCheckTime)){
         const bool buttonPressed = ((PINB & (1 << PB2)) == 0); // Если низкий уровень - то кнопка нажата
         if (buttonPressed){
             // Выбираем новый режим
@@ -322,23 +331,24 @@ void loop(){
 
             // Сохраняем режим
             // TODO: Долгая операция? Перенести в цикл очередного запуска полуволны?
-            EEPROM_write(0, powerMode); //eeprom_write_byte((uint8_t*)0, powerMode);
-
-            // Выход на порте PB3 выключен
-            PORTB &= ~(1<<PB3);
+            //EEPROM_write(0, powerMode); //eeprom_write_byte((uint8_t*)0, powerMode);
+            eeprom_write_byte((uint8_t*)0, powerMode);
             
             // Планируем следующий блинк
             blinksLeft = powerMode+1;
-            blinkStartTime = timerInterrupts + MS_TO_INTERRUPTS(blinkONDuration);
+            blinkStartTime = now + MS_TO_INTERRUPTS(blinkONDuration);
             blinkEndTime = blinkStartTime + MS_TO_INTERRUPTS(blinkOFFDuration);
-        }
 
+            // Выход на порте PB3 выключен
+            PORTB &= ~(1<<PB3);
+        }
+        
         buttonInProcess = false;
         buttonCheckTime = 0;
     }
 
     // Запуск свечения светодиода
-    if (blinkStartTime && (timerInterrupts >= blinkStartTime)){
+    if ((blinkStartTime > 0) && (now >= blinkStartTime)){
         // Выход на порте PB3 включен
         PORTB |= (1<<PB3);
         // Обнуляем переменнeю времени
@@ -346,7 +356,7 @@ void loop(){
     }
     
     // Выключаем выход если настало время
-    if (blinkEndTime && (timerInterrupts >= blinkEndTime)){
+    if ((blinkEndTime > 0) && (now >= blinkEndTime)){
         // Выход на порте PB3 выключен
         PORTB &= ~(1<<PB3);
         // Обнуляем переменные диммера
@@ -354,14 +364,14 @@ void loop(){
         // Планируем следующий блинк
         blinksLeft--;
         if(blinksLeft > 0){
-            blinkStartTime = timerInterrupts + MS_TO_INTERRUPTS(blinkONDuration);
+            blinkStartTime = now + MS_TO_INTERRUPTS(blinkONDuration);
             blinkEndTime = blinkStartTime + MS_TO_INTERRUPTS(blinkOFFDuration);
         }
     }
     
-    // Сброс против переполнений каждые 5 минут
-    const unsigned long maxVal = MS_TO_INTERRUPTS(1000*60*5);
-    if (timerInterrupts > maxVal){
+    // Сброс против переполнений каждые 10 минуту
+    const unsigned long maxVal = MS_TO_INTERRUPTS(1000*60*10);
+    if (now > maxVal){
         clearTimedValues();
         
         // Выход на порте PB0 выключен
@@ -381,6 +391,7 @@ void loop(){
         // Просто перекидываем процессор в сон, пробуждение по любому прерыванию
         MCUCR |= (1<<SE);   // Включаем режим сна, sleep_enable();
         asm("sleep"); // sleep_cpu();
+        MCUCR &= ~(1<<SE);   // Отключаем режим сна, sleep_enable();
     }
 }
 
