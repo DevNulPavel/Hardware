@@ -48,6 +48,7 @@ unsigned int blinkStartTime = 0;
 unsigned int blinkEndTime = 0;
 unsigned char blinksLeft = 0;
 unsigned char powerMode = 0;
+bool buttonInProcess = false;
 
 
 // Обработчик прерывания INT0, доступен на ноге PB1
@@ -228,6 +229,7 @@ void clearTimedValues(){
     blinkStartTime = 0;
     blinkEndTime = 0;
     blinksLeft = 0;
+    buttonInProcess = false;
 }
 
 void setup(){
@@ -301,9 +303,12 @@ void loop(){
     // Если было прерывание кнопки - обрабатываем его
     if (hasKeyInterrupt){
         // Если низкий уровень - то кнопка нажата
-        const bool buttonPressed = ((PINB & (1 << PB2)) == 0);
-        if (buttonPressed){
-            buttonCheckTime = timerInterrupts + MS_TO_INTERRUPTS(5); //  Окончательную проверку дребезга сделаем через 5 миллисекунд
+        if(buttonInProcess == false){
+            const bool buttonPressed = ((PINB & (1 << PB2)) == 0);
+            if (buttonPressed){
+                buttonCheckTime = timerInterrupts + MS_TO_INTERRUPTS(25); //  Окончательную проверку дребезга сделаем через 25 миллисекунд
+                buttonInProcess = true;
+            }
         }
         hasKeyInterrupt = false;
     }
@@ -319,12 +324,16 @@ void loop(){
             // TODO: Долгая операция? Перенести в цикл очередного запуска полуволны?
             EEPROM_write(0, powerMode); //eeprom_write_byte((uint8_t*)0, powerMode);
 
+            // Выход на порте PB3 выключен
+            PORTB &= ~(1<<PB3);
+            
             // Планируем следующий блинк
             blinksLeft = powerMode+1;
             blinkStartTime = timerInterrupts + MS_TO_INTERRUPTS(blinkONDuration);
             blinkEndTime = blinkStartTime + MS_TO_INTERRUPTS(blinkOFFDuration);
         }
 
+        buttonInProcess = false;
         buttonCheckTime = 0;
     }
 
