@@ -8,11 +8,13 @@
 
 
 #define F_CPU 9600000UL  // Частота 9.6Mhz
-/*#include <avr/io.h>
-#include <util/delay.h>
+/*#include <util/delay.h>*/
+#include <avr/io.h>
 #include <avr/interrupt.h>
-#include <avr/wdt.h>*/
 #include <avr/eeprom.h>
+#include <avr/power.h>
+#include <avr/sleep.h>
+#include <avr/wdt.h>
 
 
 #ifndef CLEAR_BIT
@@ -91,8 +93,8 @@ void initialSetupOutPorts(){
     PORTB |= (1<<PB2); // Делаем кнопку на порте PB2 подтянутой к ВЫСОКОМУ уровню, подключать к земле
 
     // Пин выхода PB3
-    DDRB |= (1<<PB3); // Настраиваем выход PB0 как выход
-    PORTB &= ~(1<<PB3); // Выход на порте PB0 выключен
+    DDRB |= (1<<PB3); // Настраиваем выход PB3 как выход
+    PORTB &= ~(1<<PB3); // Выход на порте PB3 выключен
     
     // Настраиваем остальные порты для энергосбережения
     DDRB &= ~(1<<PB4); // Настраиваем кнопку на порте как вход
@@ -100,18 +102,18 @@ void initialSetupOutPorts(){
 }
 
 void setupPowerSaveRegisters(){
-    // В регистр энергосбережения записываем PRTIM0 (отключение счетчика) и PRADC (отключение ADC преобразователя)
-    //PRR |= (1<<PRTIM0) | (1<<PRADC);
+    // В регистр энергосбережения записываем PRTIM0 (отключение счетчика)
+    //power_timer0_disable() //PRR |= (1<<PRTIM0);
 
     // В регистр энергосбережения PRADC (отключение только ADC преобразователя)
-    PRR |= (1<<PRADC);
+    power_adc_disable(); //PRR |= (1<<PRADC);
     //PRR &= ~(1<<PRTIM0);
 
     // Отключение AЦП
-    ADCSRA &= ~(1 << ADEN);
+    ADCSRA &= ~(1 << ADEN); //power_adca_disable();
 
     // Отключаем компаратор
-    ACSR |= (1 << ACD);
+    ACSR |= (1 << ACD); //power_aca_disable(); 
 }
 
 void setupMillisTimer(){
@@ -180,13 +182,16 @@ void setupButtonInterrupts(){
 }
 
 void enableInterrupts(){
-    SREG |= (1<<SREG_I); // Разрешаем прерывания, sei();
+    // Разрешаем прерывания
+    SREG |= (1<<SREG_I);
+    sei(); 
 }
 
 void setupSleepMode(){
     // Настройки режима сна, режим SLEEP_MODE_IDLE, чтобы работали таймеры?
-    MCUCR &= ~(1<<SM1); // Включаем idle mode, set_sleep_mode (SLEEP_MODE_IDLE);
-    MCUCR &= ~(1<<SM0); // Включаем idle mode, set_sleep_mode (SLEEP_MODE_IDLE);
+    set_sleep_mode(SLEEP_MODE_IDLE);
+    //MCUCR &= ~(1<<SM1); // Включаем idle mode, set_sleep_mode (SLEEP_MODE_IDLE);
+    //MCUCR &= ~(1<<SM0); // Включаем idle mode, set_sleep_mode (SLEEP_MODE_IDLE);
 }
 
 /*
@@ -389,9 +394,10 @@ void loop(){
     // Проверяем, не было ли новых прерываний в процессе работы итерации цикла
     if(!hasACInterrupt && !hasKeyInterrupt){
         // Просто перекидываем процессор в сон, пробуждение по любому прерыванию
-        MCUCR |= (1<<SE);   // Включаем режим сна, sleep_enable();
-        asm("sleep"); // sleep_cpu();
-        MCUCR &= ~(1<<SE);   // Отключаем режим сна, sleep_enable();
+        sleep_enable(); // MCUCR |= (1<<SE);   // Включаем режим сна
+        sleep_cpu(); // asm("sleep");
+        sleep_enable(); // MCUCR &= ~(1<<SE);   // Отключаем режим сна
+        sei(); // Еще раз разрешаем прерывания
     }
 }
 
