@@ -9,6 +9,7 @@
 
 #define F_CPU 9600000UL  // Частота 9.6Mhz
 /*#include <util/delay.h>*/
+#include <inttypes.h>
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <avr/eeprom.h>
@@ -31,25 +32,30 @@
 #endif
 
 #define MICROSECONDS_PER_INTERRUPT (200)
-#define MS_TO_INTERRUPTS(MS) (MS*5)
+#define MS_TO_INTERRUPTS(MS_VAL) (MS_VAL*5)
 #define INTERRUPTS_TO_MS(INTERRUPTS) (INTERRUPTS/5)
 
-const unsigned short blinkONDuration = 150;
-const unsigned short blinkOFFDuration = 150;
-const unsigned char MODES_POWERS_COUNT = 5;
-const unsigned char STEP_VALUE = 20;
+#define bool uint8_t
+#define false 0
+#define true 1
+#define max(V1, V2) (V1 > V2 ? V1 : V2)
+
+const uint8_t blinkONDuration = 150;
+const uint8_t blinkOFFDuration = 150;
+const uint8_t MODES_POWERS_COUNT = 5;
+const uint8_t STEP_VALUE = 20;
 
 volatile bool hasACInterrupt = false;
 volatile bool hasKeyInterrupt = false;
-volatile unsigned int timerInterrupts = 0;
+volatile uint16_t timerInterrupts = 0;
 
-unsigned int disabledEndTime = 0;
-unsigned int enabledEndTime = 0;
-unsigned int buttonCheckTime = 0;
-unsigned int blinkStartTime = 0;
-unsigned int blinkEndTime = 0;
-unsigned char powerMode = 0;
-unsigned char blinksLeft = 0;
+uint16_t disabledEndTime = 0;
+uint16_t enabledEndTime = 0;
+uint16_t buttonCheckTime = 0;
+uint16_t blinkStartTime = 0;
+uint16_t blinkEndTime = 0;
+uint8_t powerMode = 0;
+uint8_t blinksLeft = 0;
 bool buttonInProcess = false;
 
 
@@ -136,7 +142,7 @@ void setupMillisTimer(){
     
     // Настраиваем количество тиков при котором можно было бы настроить прерывание компаратора с обнулением счетчика внутри
     // при делителе 1: 1/(9.6MHz/8) = 0.8333333333333333us каждый тик, 1200 тиков - 1ms
-    TCCR0B |= (1<<FOC0A);  // Включаем сравнение с маской (вроде бы работает и без этого)
+    //TCCR0B |= (1<<FOC0A);  // Force Output Compare A, Включаем сравнение с маской?? (вроде бы работает и без этого)
     OCR0A = 240; // Маска совпадения значения, 5 прерываний в 1ms (надо ли 240-1?)
 
     // Обнуление счетчика
@@ -226,32 +232,25 @@ unsigned char EEPROM_read(unsigned char ucAddress) {
     return EEDR;
 }*/
 
-void clearTimedValues(){
-    uint8_t oldSREG = SREG; // Preserve old SREG value 
-    cli();                  // Disable global interrupts
-    timerInterrupts = 0;    // Store timer0 overflow count
-    SREG = oldSREG;         // Restore SREG
-    
-    disabledEndTime = 0;
-    enabledEndTime = 0;
-    buttonCheckTime = 0;
-    blinkStartTime = 0;
-    blinkEndTime = 0;
-    blinksLeft = 0;
-    buttonInProcess = false;
-}
-
 void setup(){
     // Обнуление переменных
     hasACInterrupt = false;
     hasKeyInterrupt = false;
-    clearTimedValues();
+	timerInterrupts = 0;    // Store timer0 overflow count
+	disabledEndTime = 0;
+	enabledEndTime = 0;
+	buttonCheckTime = 0;
+	blinkStartTime = 0;
+	blinkEndTime = 0;
+	blinksLeft = 0;
+	buttonInProcess = false;
 
     // Прочитаем последний сохраненный режим
-    powerMode = (eeprom_read_byte((uint8_t*)0) % MODES_POWERS_COUNT);//(EEPROM_read(0) % MODES_POWERS_COUNT); // Чтобы запустился предыдущий уровень, eeprom_read_byte((uint8_t*)0);
-
+    //powerMode = (eeprom_read_byte((uint8_t*)0) % MODES_POWERS_COUNT);//(EEPROM_read(0) % MODES_POWERS_COUNT); // Чтобы запустился предыдущий уровень, eeprom_read_byte((uint8_t*)0);
+	powerMode = 0;
+	
     // Отключение WatchDog
-    wdt_disable();
+    //wdt_disable();
 
     // Выставить порты в конкретное состояние InputPullup, чтобы по ним не происходили прерывания
     initialSetupOutPorts();
@@ -278,22 +277,22 @@ void setup(){
 void loop(){
     uint8_t oldSREG = SREG; // Preserve old SREG value 
     cli();                  // Disable global interrupts
-    const unsigned int now = timerInterrupts;    // Store timer0 overflow count
+    const uint16_t now = timerInterrupts;    // Store timer0 overflow count
     SREG = oldSREG;         // Restore SREG
     
     // Пока есть было прерывания - обрабатываем
     if(hasACInterrupt){
-        const char powerACValue = STEP_VALUE*powerMode+STEP_VALUE;
-        const unsigned short zeroCrossPeriodTime = MS_TO_INTERRUPTS(1000/50/2); // Период между нулями - 10ms
-        const unsigned short enabledDuration = powerACValue * zeroCrossPeriodTime / 100;
-        const unsigned short disabledDuration = zeroCrossPeriodTime - enabledDuration;
-        const unsigned short disableOutrun = 800/MICROSECONDS_PER_INTERRUPT; // На сколько микросекунд до конца полуволны закроется выход для следующего срабатывания
+        const uint8_t powerACValue = STEP_VALUE*powerMode+STEP_VALUE;
+        const uint16_t zeroCrossPeriodTime = MS_TO_INTERRUPTS(10); // 1000/50/2, Период между нулями - 10ms
+        const uint16_t enabledDuration = powerACValue * zeroCrossPeriodTime / 100;
+        const uint16_t disabledDuration = zeroCrossPeriodTime - enabledDuration;
+        const uint16_t disableOutrun = 800/MICROSECONDS_PER_INTERRUPT; // На сколько микросекунд до конца полуволны закроется выход для следующего срабатывания
 
         // Время, когда сигнал активен
         disabledEndTime = now + disabledDuration;
         // Деактивируем за 1 ms до конца полуволны
         enabledEndTime = disabledEndTime + enabledDuration - disableOutrun;
-        enabledEndTime = max(enabledEndTime, disabledEndTime);
+        //enabledEndTime = max(enabledEndTime, disabledEndTime);
         
         hasACInterrupt = false;
     }
@@ -337,15 +336,12 @@ void loop(){
             // Сохраняем режим
             // TODO: Долгая операция? Перенести в цикл очередного запуска полуволны?
             //EEPROM_write(0, powerMode); //eeprom_write_byte((uint8_t*)0, powerMode);
-            eeprom_write_byte((uint8_t*)0, powerMode);
+            //eeprom_write_byte((uint8_t*)0, powerMode);
             
             // Планируем следующий блинк
             blinksLeft = powerMode+1;
             blinkStartTime = now + MS_TO_INTERRUPTS(blinkONDuration);
             blinkEndTime = blinkStartTime + MS_TO_INTERRUPTS(blinkOFFDuration);
-
-            // Выход на порте PB3 выключен
-            PORTB &= ~(1<<PB3);
         }
         
         buttonInProcess = false;
@@ -374,15 +370,20 @@ void loop(){
         }
     }
     
-    // Сброс против переполнений каждые 10 минуту
-    const unsigned long maxVal = MS_TO_INTERRUPTS(1000*60*10);
-    if (now > maxVal){
-        clearTimedValues();
-        
-        // Выход на порте PB0 выключен
-        PORTB &= ~(1<<PB0);
-        // Выход на порте PB3 выключен
-        PORTB &= ~(1<<PB3);
+    // Сброс против переполнений каждую 5 секунд
+    const uint16_t maxValOverflow = MS_TO_INTERRUPTS(5000); // 1000*60
+    if (now > maxValOverflow){
+		uint8_t oldSREG = SREG; // Preserve old SREG value
+		cli();                  // Disable global interrupts
+		const uint16_t nowLocal = timerInterrupts;    // Store timer0 overflow count
+		timerInterrupts = 0;
+		SREG = oldSREG;         // Restore SREG		
+		
+		disabledEndTime %= nowLocal;
+		enabledEndTime %= nowLocal;
+		buttonCheckTime %= nowLocal;
+		blinkStartTime %= nowLocal;
+		blinkEndTime %= nowLocal;
     }
     
     // Если ничего не запланировано - сбрасываем значения, чтобы не словить переполнение
@@ -397,7 +398,7 @@ void loop(){
         sleep_enable(); // MCUCR |= (1<<SE);   // Включаем режим сна
         sleep_cpu(); // asm("sleep");
         sleep_disable(); // MCUCR &= ~(1<<SE);   // Отключаем режим сна
-        sei(); // Еще раз разрешаем прерывания
+        //sei(); // Еще раз разрешаем прерывания
     }
 }
 
