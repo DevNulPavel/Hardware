@@ -7,12 +7,15 @@
 // http://www.customelectronics.ru/avr-apparatnyiy-shim-mikrokontrollera/
 
 
-#define F_CPU 1600000UL  // Частота 16.0Mhz
-/*#include <avr/io.h>
-#include <util/delay.h>
+#define F_CPU 16000000UL  // Частота 16Mhz
+/*#include <util/delay.h>*/
+#include <inttypes.h>
+#include <avr/io.h>
 #include <avr/interrupt.h>
+#include <avr/eeprom.h>
+#include <avr/power.h>
+#include <avr/sleep.h>
 #include <avr/wdt.h>
-#include <avr/eeprom.h>*/
 
 
 #ifndef CLEAR_BIT
@@ -28,40 +31,51 @@
     #define BIT_IS_SET(SRC, BIT) (_SFR_BYTE(SRC) & _BV(BIT))
 #endif
 
-#define MICROSECONDS_PER_INTERRUPT (500)
-#define MS_TO_INTERRUPTS(MS) (MS*2)
-#define INTERRUPTS_TO_MS(INTERRUPTS) (INTERRUPTS/2)
+// Macroses
+#define bool uint8_t
+#define false 0
+#define true 1
+#define max(V1, V2) (V1 > V2 ? V1 : V2)
 
-const unsigned short blinkONDuration = 150;
-const unsigned short blinkOFFDuration = 150;
-const unsigned char MODES_POWERS_COUNT = 5;
-const unsigned char STEP_VALUE = 20;
+// Helper macroses
+#define MICROSECONDS_PER_INTERRUPT (200)
+#define MS_TO_INTERRUPTS(MS_VAL) (MS_VAL*5)
+#define INTERRUPTS_TO_MS(INTERRUPTS) (INTERRUPTS/5)
 
-volatile bool hasACInterrupt = false;
-volatile bool hasKeyInterrupt = false;
-volatile unsigned int timerInterrupts = 0;
+// Flags
+#define AC_INTERRUPT_BIT 1
+#define KEY_INTERRUPT_BIT 2
+#define BUTTON_IN_PROCESS_BIT 4
 
-unsigned int disabledEndTime = 0;
-unsigned int enabledEndTime = 0;
-unsigned int buttonCheckTime = 0;
-unsigned int blinkStartTime = 0;
-unsigned int blinkEndTime = 0;
-unsigned char blinksLeft = 0;
-unsigned char powerMode = 0;
-bool buttonInProcess = false;
+// Сonstants
+const uint8_t blinkONDuration = 150;
+const uint8_t blinkOFFDuration = 150;
+const uint8_t MODES_POWERS_COUNT = 5;
+const uint8_t STEP_VALUE = 20;
+
+volatile uint8_t flags = 0;
+volatile uint16_t timerInterrupts = 0;
+
+uint16_t disabledEndTime = 0;
+uint16_t enabledEndTime = 0;
+uint16_t buttonCheckTime = 0;
+uint16_t blinkStartTime = 0;
+uint16_t blinkEndTime = 0;
+uint8_t powerMode = 0;
+uint8_t blinksLeft = 0;
 
 
 // Обработчик прерывания INT0, доступен на ноге PD2
 // Также по прерыванию происходит пробуждение микроконтроллера
 ISR(INT0_vect) {
-    //PORTB &= ~(1<<PD2); // Выход на порте PB0 сразу же должен быть выключен чтобы не активировать новую полуволну сразу, раскомментить в случае проблем
-    hasACInterrupt = true;
+    //PORTB &= ~(1<<PD2); // Выход на порте PD2 сразу же должен быть выключен чтобы не активировать новую полуволну сразу, раскомментить в случае проблем
+    SET_BIT(flags, AC_INTERRUPT_BIT);
 }
 
 // Обработчик прерывания PCINT0, доступно на любых ножках, срабатывает на изменение уровня
 // Также по прерыванию происходит пробуждение микроконтроллера
 ISR(PCINT0_vect) {
-    hasKeyInterrupt = true;
+    SET_BIT(flags, KEY_INTERRUPT_BIT);
 }
 
 // Обработчик прерывания переполнения таймера
@@ -76,54 +90,41 @@ ISR(TIM0_COMPA_vect) {
     timerInterrupts++;
 }
 
-void watchdogOff() {
-    asm("wdr"); //__watchdog_reset();
-    /* Clear WDRF in MCUSR */
-    MCUSR &= ~(1<<WDRF);
-    /* Write logical one to WDCE and WDE */
-    /* Keep old prescaler setting to prevent unintentional time-out */
-    WDTCSR |= (1<<WDCE) | (1<<WDE);
-    /* Turn off WDT */
-    WDTCSR = 0x00;
-}
-
 // Выставить порты в конкретное состояние InputPullup, чтобы по ним не происходили прерывания
 void initialSetupOutPorts(){
     // Пин выхода PB0
-    DDRB |= (1<<PB0); // Настраиваем выход PB0 как выход
-    PORTB &= ~(1<<PB0); // Выход на порте PB0 выключен
+    SET_BIT(DDRB, PB0); // Настраиваем порт PB0 как выход
+    CLEAR_BIT(PORTB, PB0); // Выход на порте PB0 выключен
 
     // Пин детектора нуля PD2
-    DDRD &= ~(1<<PD2); // Настраиваем детектор нуля на порте PD2 как вход
-    PORTD |= (1<<PD2); // Делаем кнопку на порте PD2 подтянутой к ВЫСОКОМУ уровню, подключать к земле
+    CLEAR_BIT(DDRB, PD2); // Настраиваем детектор нуля на порте PD2 как вход
+    SET_BIT(PORTB, PD2);  // Делаем кнопку на порте PD2 подтянутой к ВЫСОКОМУ уровню, подключать к земле
 
     // Пины кнопки на порте PB1
-    DDRB &= ~(1<<PB1); // Настраиваем кнопку на порте PB2 как вход
-    PORTB |= (1<<PB1); // Делаем кнопку на порте PB2 подтянутой к ВЫСОКОМУ уровню, подключать к земле
+    CLEAR_BIT(DDRB, PB1); // Настраиваем кнопку на порте PB1 как вход
+    SET_BIT(PORTB, PB1);  // Делаем кнопку на порте PB1 подтянутой к ВЫСОКОМУ уровню, подключать к земле
 
-    // Пин выхода PB3
-    DDRB |= (1<<PB0); // Настраиваем выход PB0 как выход
-    PORTB &= ~(1<<PB0); // Выход на порте PB0 выключен
+    // Пин выхода PB2
+    SET_BIT(DDRB, PB2);    // Настраиваем выход PB3 как выход
+    CLEAR_BIT(PORTB, PB2); // Выход на порте PB3 выключен
     
     // Настраиваем остальные порты для энергосбережения
     // TODO: !!!
 }
 
 void setupPowerSaveRegisters(){
-    // Отключение TWI
-    //PRR |= (1<<PRTWI);
+    // В регистр энергосбережения записываем PRTIM0 (отключение счетчика)
+    //power_timer0_disable() //PRR |= (1<<PRTIM0);
 
-    // В регистр энергосбережения записываем отключение ADC преобразователя
-    PRR |= (1<<PRADC);
-
-    // Отключение счетчика 0
+    // В регистр энергосбережения PRADC (отключение только ADC преобразователя)
+    power_adc_disable(); //PRR |= (1<<PRADC);
     //PRR &= ~(1<<PRTIM0);
 
     // Отключение счетчика 1
-    PRR |= (1<<PRTIM1);
+    SET_BIT(PRR, PRTIM1);
 
     // Отключение счетчика 2
-    PRR |= (1<<PRTIM2);
+    SET_BIT(PRR, PRTIM2);
 
     // Отключение SPI интерфейса
     //PRR |= (1<<PRSPI);
@@ -132,33 +133,33 @@ void setupPowerSaveRegisters(){
     //PRR |= (1<<PRUSART0);
 
     // Отключение AЦП
-    ADCSRA = ~(1 << ADEN);
+    CLEAR_BIT(ADCSRA, ADEN); //power_adca_disable();
 
     // Отключаем компаратор
-    ACSR |= (1 << ACD);
+    SET_BIT(ACSR, ACD); //power_aca_disable(); 
 }
 
 void setupMillisTimer(){
     // Настройка таймера
     // Включаем вызов прерывания у timer0 при переполнении
     //TIMSK0 &= ~((1<<TOIE0); // Прерывание по переполнению отключено
-    TIMSK0 |= (1<<OCIE0A);  // Вызовется прерывание по компаратору при достижении 120 компаратор A
+    SET_BIT(TIMSK0, OCIE0A);  // Вызовется прерывание по компаратору при достижении 240 компаратор A
     //TIMSK0 &= ~(1<<OCIE0B);  // Прерывание по компаратору B отключено
     
     // Настраиваем, чтобы при достижении конкретного значения в OCR0A таймер сбросился сам, и не надо было бы в прерывании вручную обнулять счетчик
     //TCCR0B &= ~(1<<WGM02);
-    TCCR0A |= (1<<WGM01);
+    SET_BIT(TCCR0A, WGM01);
     //TCCR0A &= ~(1<<WGM00);
 
     // Предделитель 64
     // Each timer tick is 1/(16.0MHz/64) = 4us
     //TCCR0B &= ~(1<<CS02);
-    TCCR0B |= (1<<CS01);
-    TCCR0B &= ~(1<<CS00); 
+    SET_BIT(TCCR0B, CS01);
+    //TCCR0B &= ~(1<<CS00); 
     
     // Настраиваем количество тиков при котором можно было бы настроить прерывание компаратора с обнулением счетчика внутри
     // при делителе 1: 1/(16.0MHz/64) = 4us каждый тик, 250 тиков - 1ms
-    TCCR0B |= (1<<FOC0A);  // Включаем сравнение с маской (вроде бы работает и без этого)
+    //TCCR0B |= (1<<FOC0A);  // Force Output Compare A, Включаем сравнение с маской?? (вроде бы работает и без этого)
     OCR0A = 125; // Маска совпадения значения, 2 прерывания в 1ms (надо ли 125-1?)
 
     // Обнуление счетчика
@@ -190,43 +191,45 @@ void disableMillisTimer(){
     timerInterrupts = 0;
 }*/
 
-// Настройка прерываний INT0 для детектирования нуля
 void setupACInterrupts(){
     // Разрешаем внешние прерывания на INT0
-    EIMSK |= (1<<INT0); 
+    SET_BIT(EIMSK, INT0);
+
     // Прерывания будут при падении уровня, поддерживается только у прерывания INT0, не у PCINT (ISC01, ISC00 биты для настроек)
-    EICRA |= (1<<ISC01); 
-    EICRA &= ~(1<<ISC00); 
+    SET_BIT(EICRA, ISC01);
+    CLEAR_BIT(EICRA, ISC00);
 }
 
-// Настройка прерываний для кнопки
 void setupButtonInterrupts(){
-    PCICR |= (1<<PCIE0); // Разрешаем внешние прерывания PCINT0-7, работают толкьо на изменение состояний
-    PCMSK0 |= (1<<PCINT1);  // Разрешаем по маске прерывания на ноге PB1
+    SET_BIT(PCICR, PCIE0);   // Разрешаем внешние прерывания PCINT0-7, работают толкьо на изменение состояний
+    SET_BIT(PCMSK0, PCINT1); // Разрешаем по маске прерывания на ноге PB1
 }
 
 void enableInterrupts(){
-    SREG |= (1<<SREG_I); // Разрешаем прерывания, sei();
+    // Разрешаем прерывания
+    //SREG |= (1<<SREG_I);
+    sei(); 
 }
 
 void setupSleepMode(){
     // Настройки режима сна, режим SLEEP_MODE_IDLE, чтобы работали таймеры?
-    SMCR &= ~(1<<SM2); // Включаем idle mode, set_sleep_mode (SLEEP_MODE_IDLE);
-    SMCR &= ~(1<<SM1); // Включаем idle mode, set_sleep_mode (SLEEP_MODE_IDLE);
-    SMCR &= ~(1<<SM0); // Включаем idle mode, set_sleep_mode (SLEEP_MODE_IDLE);
+    set_sleep_mode(SLEEP_MODE_IDLE);
+    //MCUCR &= ~(1<<SM1); // Включаем idle mode, set_sleep_mode (SLEEP_MODE_IDLE);
+    //MCUCR &= ~(1<<SM0); // Включаем idle mode, set_sleep_mode (SLEEP_MODE_IDLE);
 }
 
+/*
 // Запись в постоянную память из документации
 void EEPROM_write(unsigned char ucAddress, unsigned char ucData) {
     // Ожидаем завершения предыдущей записи
     while(EECR & (1<<EEPE));
-    // Выставляем режим записи (Можно и режим записи и чтения атомарного)
+    // Выставляем режим записи и чтения атомарного
     EECR |= (1<<EEPM1);
-    EECR &= ~(1<<EEPM0);
+    EECR |= (1<<EEPM0);
     // Записываем адреса и данные в регистры
-    EEARL = ucAddress; // EEARH - старший байт адреса
+    EEARL = ucAddress;
     EEDR = ucData;
-    // Разрешаем запись
+    // разрешаем запись
     EECR |= (1<<EEMPE);
     // Запускаем запись
     EECR |= (1<<EEPE);
@@ -235,19 +238,21 @@ void EEPROM_write(unsigned char ucAddress, unsigned char ucData) {
 // Чтение из постоянной памяти, код из документации
 unsigned char EEPROM_read(unsigned char ucAddress) {
     // Ожидаем завершения предыдущей записи
-    // while(EECR & (1<<EEPE)); // Чтение происходит один раз - не нужно проверять
-    // Выставляем режим чтения (Можно и режим записи и чтения атомарного)
-    EECR &= ~(1<<EEPM1);
+    while(EECR & (1<<EEPE)); // Чтение происходит один раз - не нужно проверять
+    // Выставляем режим записи и чтения атомарного
+    EECR |= (1<<EEPM1);
     EECR |= (1<<EEPM0);
     // Выставляем регистр адреса
-    EEARL = ucAddress; // EEARH - старший байт адреса
+    EEARL = ucAddress;
     // Запускаем операцию чтения
     EECR |= (1<<EERE);
     // Возвращаем прочитанные данные
     return EEDR;
-}
+}*/
 
-void clearTimedValues(){
+void setup(){
+    // Обнуление переменных
+    flags = 0;
     timerInterrupts = 0;
     disabledEndTime = 0;
     enabledEndTime = 0;
@@ -255,20 +260,12 @@ void clearTimedValues(){
     blinkStartTime = 0;
     blinkEndTime = 0;
     blinksLeft = 0;
-    buttonInProcess = false;
-}
-
-void setup(){
-    // Обнуление переменных
-    hasACInterrupt = false;
-    hasKeyInterrupt = false;
-    clearTimedValues();
 
     // Прочитаем последний сохраненный режим
-    powerMode = (EEPROM_read(0) % MODES_POWERS_COUNT); // Чтобы запустился предыдущий уровень, eeprom_read_byte((uint8_t*)0);
-
+    powerMode = (eeprom_read_byte((uint8_t*)4) % MODES_POWERS_COUNT);//(EEPROM_read(0) % MODES_POWERS_COUNT); // Чтобы запустился предыдущий уровень, eeprom_read_byte((uint8_t*)0);
+    
     // Отключение WatchDog
-    watchdogOff(); //wdt_disable();
+    wdt_disable();
 
     // Выставить порты в конкретное состояние InputPullup, чтобы по ним не происходили прерывания
     initialSetupOutPorts();
@@ -293,107 +290,116 @@ void setup(){
 }
 
 void loop(){
+    uint8_t oldSREG = SREG;
+    cli();
+    const uint16_t now = timerInterrupts;
+    SREG = oldSREG;
+    
     // Пока есть было прерывания - обрабатываем
-    if(hasACInterrupt){
-        const char powerACValue = STEP_VALUE*powerMode+STEP_VALUE;
-        const unsigned short zeroCrossPeriodTime = MS_TO_INTERRUPTS(1000/50/2); // Период между нулями - 10ms
-        const unsigned short enabledDuration = powerACValue * zeroCrossPeriodTime / 100;
-        const unsigned short disabledDuration = zeroCrossPeriodTime - enabledDuration;
-        const unsigned short disableOutrun = 800/MICROSECONDS_PER_INTERRUPT; // На сколько микросекунд до конца полуволны закроется выход для следующего срабатывания
+    if(BIT_IS_SET(flags, AC_INTERRUPT_BIT)){
+        const uint8_t powerACValue = STEP_VALUE*powerMode+STEP_VALUE;
+        const uint16_t zeroCrossPeriodTime = MS_TO_INTERRUPTS(10); // 1000/50/2, Период между нулями - 10ms
+        const uint16_t enabledDuration = powerACValue * zeroCrossPeriodTime / 100;
+        const uint16_t disabledDuration = zeroCrossPeriodTime - enabledDuration;
+        const uint16_t disableOutrun = 800/MICROSECONDS_PER_INTERRUPT; // На сколько микросекунд до конца полуволны закроется выход для следующего срабатывания
 
         // Время, когда сигнал активен
-        disabledEndTime = timerInterrupts + disabledDuration;
+        disabledEndTime = now + disabledDuration;
         // Деактивируем за 1 ms до конца полуволны
         enabledEndTime = disabledEndTime + enabledDuration - disableOutrun;
-        enabledEndTime = max(enabledEndTime, disabledEndTime);
+        //enabledEndTime = max(enabledEndTime, disabledEndTime);
         
-        hasACInterrupt = false;
+        CLEAR_BIT(flags, AC_INTERRUPT_BIT);
     }
 
     // Включаем выход если настало время
-    if (disabledEndTime && (timerInterrupts >= disabledEndTime)){
+    if ((disabledEndTime > 0) && (now >= disabledEndTime)){
         // Выход на порте PB0 включен
-        PORTB |= (1<<PB0);
+        SET_BIT(PORTB, PB0);
         // Обнуляем переменные диммера
         disabledEndTime = 0;
     }
     
     // Выключаем выход если настало время
-    if (enabledEndTime && (timerInterrupts >= enabledEndTime)){
+    if ((enabledEndTime > 0) && (now >= enabledEndTime)){
         // Выход на порте PB0 выключен
-        PORTB &= ~(1<<PB0);
+        CLEAR_BIT(PORTB, PB0);
         // Обнуляем переменные диммера
         enabledEndTime = 0;
     }
 
     // Если было прерывание кнопки - обрабатываем его
-    if (hasKeyInterrupt){
+    if (BIT_IS_SET(flags, KEY_INTERRUPT_BIT)){
         // Если низкий уровень - то кнопка нажата
-        if(buttonInProcess == false){
+        if(BIT_IS_SET(flags, BUTTON_IN_PROCESS_BIT)){
             const bool buttonPressed = ((PINB & (1 << PB1)) == 0);
             if (buttonPressed){
-                buttonCheckTime = timerInterrupts + MS_TO_INTERRUPTS(25); //  Окончательную проверку дребезга сделаем через 25 миллисекунд
-                buttonInProcess = true;
+                buttonCheckTime = now + MS_TO_INTERRUPTS(25); //  Окончательную проверку дребезга сделаем через 25 миллисекунд
+                BIT_IS_SET(flags, BUTTON_IN_PROCESS_BIT);
             }
         }
-        hasKeyInterrupt = false;
+
+        CLEAR_BIT(flags, KEY_INTERRUPT_BIT);
     }
 
     // Выполняем обработку антидребезга
-    if (buttonCheckTime && (timerInterrupts >= buttonCheckTime)){
-        const bool buttonPressed = ((PINB & (1 << PB1)) == 0); // Если низкий уровень - то кнопка нажата
+    if ((buttonCheckTime > 0) && (now >= buttonCheckTime)){
+        const bool buttonPressed = (BIT_IS_SET(PINB, PB1) == 0); // Если низкий уровень - то кнопка нажата
         if (buttonPressed){
             // Выбираем новый режим
             powerMode = (powerMode + 1) % MODES_POWERS_COUNT;
 
             // Сохраняем режим
             // TODO: Долгая операция? Перенести в цикл очередного запуска полуволны?
-            EEPROM_write(0, powerMode); //eeprom_write_byte((uint8_t*)0, powerMode);
-
-            // Выход на порте PB2 выключен
-            PORTB &= ~(1<<PB2);
+            //EEPROM_write(0, powerMode); //eeprom_write_byte((uint8_t*)0, powerMode);
+            eeprom_write_byte((uint8_t*)4, powerMode);
             
             // Планируем следующий блинк
             blinksLeft = powerMode+1;
-            blinkStartTime = timerInterrupts + MS_TO_INTERRUPTS(blinkONDuration);
+            blinkStartTime = now + MS_TO_INTERRUPTS(blinkONDuration);
             blinkEndTime = blinkStartTime + MS_TO_INTERRUPTS(blinkOFFDuration);
         }
-
-        buttonInProcess = false;
+        
+        CLEAR_BIT(flags, BUTTON_IN_PROCESS_BIT);
         buttonCheckTime = 0;
     }
 
     // Запуск свечения светодиода
-    if (blinkStartTime && (timerInterrupts >= blinkStartTime)){
-        // Выход на порте PB3 включен
-        PORTB |= (1<<PB2);
+    if ((blinkStartTime > 0) && (now >= blinkStartTime)){
+        // Выход на порте PB2 включен
+        SET_BIT(PORTB, PB2);
         // Обнуляем переменнeю времени
         blinkStartTime = 0;
     }
     
     // Выключаем выход если настало время
-    if (blinkEndTime && (timerInterrupts >= blinkEndTime)){
-        // Выход на порте PB3 выключен
-        PORTB &= ~(1<<PB2);
+    if ((blinkEndTime > 0) && (now >= blinkEndTime)){
+        // Выход на порте PB2 выключен
+        CLEAR_BIT(PORTB, PB2);
         // Обнуляем переменные диммера
         blinkEndTime = 0;
         // Планируем следующий блинк
         blinksLeft--;
         if(blinksLeft > 0){
-            blinkStartTime = timerInterrupts + MS_TO_INTERRUPTS(blinkONDuration);
+            blinkStartTime = now + MS_TO_INTERRUPTS(blinkONDuration);
             blinkEndTime = blinkStartTime + MS_TO_INTERRUPTS(blinkOFFDuration);
         }
     }
     
-    // Сброс против переполнений каждые 5 минут
-    const unsigned long maxVal = MS_TO_INTERRUPTS(1000*60*5);
-    if (timerInterrupts > maxVal){
-        clearTimedValues();
+    // Сброс против переполнений каждые 5 секунд
+    const uint16_t maxValOverflow = MS_TO_INTERRUPTS(5000); // 1000*60
+    if (now > maxValOverflow){
+        uint8_t oldSREG = SREG;
+        cli();
+        const uint16_t nowLocal = timerInterrupts;
+        timerInterrupts = 0;
+        SREG = oldSREG;
         
-        // Выход на порте PB0 выключен
-        PORTB &= ~(1<<PB0);
-        // Выход на порте PB3 выключен
-        PORTB &= ~(1<<PB2);
+        disabledEndTime %= nowLocal;
+        enabledEndTime %= nowLocal;
+        buttonCheckTime %= nowLocal;
+        blinkStartTime %= nowLocal;
+        blinkEndTime %= nowLocal;
     }
     
     // Если ничего не запланировано - сбрасываем значения, чтобы не словить переполнение
@@ -403,10 +409,12 @@ void loop(){
     }*/
 
     // Проверяем, не было ли новых прерываний в процессе работы итерации цикла
-    if(!hasACInterrupt && !hasKeyInterrupt){
+    if(BIT_IS_SET(flags, AC_INTERRUPT_BIT | KEY_INTERRUPT_BIT)){
         // Просто перекидываем процессор в сон, пробуждение по любому прерыванию
-        SMCR |= (1<<SE);   // Включаем режим сна, sleep_enable();
-        asm("sleep"); // sleep_cpu();
+        sleep_enable(); // MCUCR |= (1<<SE);   // Включаем режим сна
+        sleep_cpu(); // asm("sleep");
+        sleep_disable(); // MCUCR &= ~(1<<SE);   // Отключаем режим сна
+        //sei(); // Еще раз разрешаем прерывания
     }
 }
 
