@@ -189,7 +189,7 @@ void setupButtonInterrupts(){
 
 void enableInterrupts(){
     // Разрешаем прерывания
-    SREG |= (1<<SREG_I);
+    //SREG |= (1<<SREG_I);
     sei(); 
 }
 
@@ -370,7 +370,7 @@ void loop(){
         }
     }
     
-    // Сброс против переполнений каждую 5 секунд
+    // Сброс против переполнений каждые 5 секунд
     const uint16_t maxValOverflow = MS_TO_INTERRUPTS(5000); // 1000*60
     if (now > maxValOverflow){
 		uint8_t oldSREG = SREG; // Preserve old SREG value
